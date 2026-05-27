@@ -1,0 +1,278 @@
+<?xml version="1.0"?>
+<robot name="robotarm" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:property name="PI" value="3.14159265"/>
+  <xacro:property name="PI_half" value="1.57079632"/>
+  <xacro:property name="link0_mass" value="3"/>
+  <xacro:property name="link0_x" value="0.15"/>
+  <xacro:property name="link0_y" value="0.2"/>
+  <xacro:property name="link0_z" value="0.06"/>
+  <xacro:property name="link1_mass" value="0.8"/>
+  <xacro:property name="link1_x" value="0.11"/>
+  <xacro:property name="link1_y" value="0.05"/>
+  <xacro:property name="link1_z" value="0.08"/>
+  <xacro:property name="link2_mass" value="0.405"/>
+  <xacro:property name="link2_x" value="0.04"/>
+  <xacro:property name="link2_y" value="0.05"/>
+  <xacro:property name="link2_z" value="0.17"/>
+  <xacro:property name="link3_mass" value="0.2"/>
+  <xacro:property name="link3_x" value="0.02"/>
+  <xacro:property name="link3_y" value="0.04"/>
+  <xacro:property name="link3_z" value="0.17"/>
+  <xacro:property name="link4_mass" value="0.01"/>
+  <xacro:property name="link4_x" value="0.03"/>
+  <xacro:property name="link4_y" value="0.01"/>
+  <xacro:property name="link4_z" value="0.06"/>
+
+  <xacro:include filename="$(find myrobot)/urdf/myrobot.gazebo" />
+  <xacro:include filename="$(find myrobot)/urdf/materials.xacro" />
+
+  <link name="world"/>
+
+  <joint name="fixed" type="fixed">
+    <parent link="world"/>
+    <child link="link0"/>
+  </joint>
+
+  <link name="link0">
+     <visual>
+       <origin xyz="-0.037 0 0" rpy="0 0 ${PI/2}"/>
+       <geometry>
+        <mesh filename="file://$(find myrobot)/meshes/link0_fake_longer.stl" scale="0.001 0.001 0.001"/>
+       </geometry>
+       <material name="orange"/>
+     </visual>
+     <collision>
+       <origin xyz="-0.037 0 0" rpy="0 0 ${PI_half}"/>
+       <geometry>
+        <mesh filename="file://$(find myrobot)/meshes/link0_fake_longer.stl" scale="0.001 0.001 0.001"/> 
+       </geometry>
+     </collision>
+     <inertial>
+        <origin xyz="-0.037 0 ${0.06/2}" rpy="0 0 ${PI_half}"/>
+       <mass value="${link0_mass}"/>
+       <inertia 
+          ixx="1.0" ixy="0.0" ixz="0.0"
+          iyy="1.0" iyz="0.0"
+          izz="1.0"/>
+     </inertial>
+   </link>
+
+  <joint name="joint1" type="revolute">
+    <parent link="link0"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="1.0" friction="1.33136"/>
+    <limit effort="3.36343" lower="-1.2" upper="1.2" velocity="2.71224"/>
+  </joint>
+
+  <link name="link1">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI_half}"/>
+      <geometry>
+        <mesh filename="file://$(find myrobot)/meshes/link1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${0.032/2}" rpy="0 0 ${PI_half}"/>
+      <geometry>
+      <box size="0.03 0.03 0.032"/>
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0 0 ${0.032+0.05/2}" rpy="0 0 ${PI_half}"/>
+      <geometry>
+      <box size="0.19 0.03 0.05"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 ${0.082/2}" rpy="0 0 ${PI_half}"/>
+      <mass value="${link1_mass}"/>
+      <inertia
+          ixx="${link1_mass / 12.0 * (0.01*0.01*2)}" ixy="0.0" ixz="0.0"
+          iyy="${link1_mass / 12.0 * (0.01*0.01*2)}" iyz="0.0"
+          izz="${link1_mass / 12.0 * (0.01*0.01 + 0.082*0.082)}"/>
+    </inertial>
+  </link>
+
+  <joint name="joint2" type="revolute">
+     <parent link="link1"/>
+     <child link="link2"/>
+     <origin xyz=" 0 0 0.082" rpy="0 0 0"/>
+     <axis xyz="0 1 0"/>
+     <dynamics damping="1.0" friction="2.329875"/>
+     <limit effort="5.886" lower="-2" upper="2" velocity="1.54985"/>
+   </joint>
+
+  <link name="link2">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI_half}"/>
+      <geometry>
+        <mesh filename="file://$(find myrobot)/meshes/link2.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="orange"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${0.132/2}" rpy="0 0 ${PI_half}"/>
+      <geometry>
+        <box size="0.05 0.05 0.132"/>
+      </geometry>
+    </collision>
+    <inertial>
+     <origin xyz="0 0 ${0.132/2}" rpy="0 0 ${PI_half}"/>
+      <mass value="${link2_mass}"/>
+      <inertia
+          ixx="${link2_mass / 12.0 * (link2_z*link2_z + link2_y*link2_y)}" ixy="0.0" ixz="0.0"
+          iyy="${link2_mass / 12.0 * (link2_z*link2_z + link2_y*link2_x)}" iyz="0.0"
+          izz="${link2_mass / 12.0 * (link2_x*link2_x + link2_y*link2_y)}"/>
+    </inertial>
+  </link>
+
+  <joint name="joint3" type="revolute">
+     <parent link="link2"/>
+     <child link="link3"/>
+     <origin xyz="0 0 0.132" rpy="0 0 0"/>
+     <axis xyz="0 1 0"/>
+     <dynamics damping="1.0" friction="1.176032"/>
+     <limit effort="4.20429" lower="-1.67" upper="1.67" velocity="2.75622"/>
+   </joint>
+
+  <link name="link3">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI_half}"/>
+      <geometry>
+        <mesh filename="file://$(find myrobot)/meshes/link3.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${0.1664/2}" rpy="0 0 ${PI_half}"/>
+      <geometry>
+        <box size="0.04 0.04 0.1664"/>
+      </geometry>
+    </collision>
+    <inertial>
+     <origin xyz="0 0 ${0.1664/2}" rpy="0 0 ${PI_half}"/>
+      <mass value="${link3_mass}"/>
+      <inertia
+          ixx="${link3_mass / 12.0 * (link3_z*link3_z + link3_y*link3_y)}" ixy="0.0" ixz="0.0"
+          iyy="${link3_mass / 12.0 * (link3_z*link3_z + link3_y*link3_x)}" iyz="0.0"
+          izz="${link3_mass / 12.0 * (link3_x*link3_x + link3_y*link3_y)}"/>
+    </inertial>
+  </link>
+
+  <joint name="joint4" type="revolute">
+     <parent link="link3"/>
+     <child link="link4"/>
+     <origin xyz="0 0 0.1664" rpy="0 0 0"/>
+     <axis xyz="0 1 0"/>
+     <dynamics damping="1.0" friction="0.07"/>
+     <limit effort="0.1962" lower="${-PI_half}" upper="${PI_half}" velocity="10.47198"/>
+   </joint>
+
+  <link name="link4">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI_half}"/>
+      <geometry>
+        <mesh filename="file://$(find myrobot)/meshes/link4.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="orange"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 ${PI_half}"/>
+      <geometry>
+        <mesh filename="file://$(find myrobot)/meshes/link4.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <inertial>
+     <origin xyz="0 0 ${0.06/2}" rpy="0 0 ${PI_half}"/>
+      <mass value="${link4_mass}"/>
+      <inertia
+          ixx="${link4_mass / 12.0 * (link4_z*link4_z + link4_y*link4_y)}" ixy="0.0" ixz="0.0"
+          iyy="${link4_mass / 12.0 * (link4_z*link4_z + link4_y*link4_x)}" iyz="0.0"
+          izz="${link4_mass / 12.0 * (link4_x*link4_x + link4_y*link4_y)}"/>
+    </inertial>
+  </link>
+
+  <joint name="joint5" type="fixed">
+     <parent link="link4"/>
+     <child link="link5"/>
+     <origin xyz="0.004 0 0.048" rpy="0 0 0"/>
+   </joint>
+
+  <link name="link5">
+  </link>
+
+  <transmission name="tran1">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="joint1">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="motor1">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+  <transmission name="tran2">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="joint2">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="motor2">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+  <transmission name="tran3">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="joint3">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="motor3">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+  <transmission name="tran4">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="joint4">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="motor4">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>  
+
+  <ros2_control name="GazeboSystem" type="system">
+    <hardware>
+      <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+    </hardware>
+    <joint name="joint1">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="joint2">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="joint3">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="joint4">
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+</robot>

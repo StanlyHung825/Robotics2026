@@ -1,0 +1,29 @@
+services:
+  sima:
+    build: .
+    image: robotics:latest
+    container_name: robotics
+    command: /bin/bash
+    tty: true
+    network_mode: host
+    ipc: host
+    privileged: true
+    stdin_open: true
+    stop_grace_period: &STOP_GRACE_PERIOD 1s
+
+    volumes:
+      - ../ws:/home/user/ws
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - $HOME/.Xauthority:/home/user/.Xauthority
+      - /dev:/dev
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+
+    working_dir:
+      /home/user/ws
+
+    environment:
+      - DISPLAY=${DISPLAY}  # Set display environment variable
+      - RCUTILS_COLORIZED_OUTPUT=1
+      - XAUTHORITY=/home/user/.Xauthority   # Set Xauthority path
+      - ROS_DOMAIN_ID=0  # ! Please distinguish the domain ID with other containers

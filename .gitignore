@@ -1,0 +1,66 @@
+# ROS 2 / colcon generated workspace outputs
+ws/build/
+ws/install/
+ws/log/
+build/
+install/
+log/
+
+# CMake / compiled artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+*.o
+*.a
+*.so
+*.d
+*.dll
+*.dylib
+*.exe
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ROS bags, runtime databases, and recordings
+*.bag
+*.bag.active
+*.db3
+*.mcap
+rosbag2_*/
+*.webm
+*.mp4
+*.avi
+*.mov
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local tool metadata
+.agents/
+.codex/

@@ -1,0 +1,10 @@
+# Station index for each Hanoi tower.
+# tower_stations[0] is tower1, tower_stations[1] is tower2, tower_stations[2] is tower3.
+# Valid station indexes are 0, 1, and 2.
+int32[3] tower_stations
+
+# Station where all towers should be moved.
+int32 target_station
+---
+bool success
+string message

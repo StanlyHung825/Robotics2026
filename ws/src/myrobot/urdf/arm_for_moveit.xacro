@@ -1,0 +1,367 @@
+<?xml version="1.0"?>
+
+<robot name="robotarm" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<!-- Constants for robot dimensions -->
+  <xacro:property name="PI" value="3.1415926535897931"/>
+  <xacro:property name="link0_mass" value="3"/>
+
+  <!--adjusted size of link to approximate the inertia with rectangular shape-->
+  <xacro:property name="link0_x" value="0.15"/>
+  <xacro:property name="link0_y" value="0.2"/>
+  <xacro:property name="link0_z" value="0.06"/>
+  
+  <xacro:property name="link1_mass" value="0.8"/>
+  <xacro:property name="link1_x" value="0.11"/>
+  <xacro:property name="link1_y" value="0.05"/>
+  <xacro:property name="link1_z" value="0.08"/>
+
+  <xacro:property name="link2_mass" value="0.405"/>
+  <xacro:property name="link2_x" value="0.04"/>
+  <xacro:property name="link2_y" value="0.05"/>
+  <xacro:property name="link2_z" value="0.17"/>
+
+  <xacro:property name="link3_mass" value="0.2"/>
+  <xacro:property name="link3_x" value="0.02"/>
+  <xacro:property name="link3_y" value="0.04"/>
+  <xacro:property name="link3_z" value="0.17"/>
+
+  <xacro:property name="link4_mass" value="0.01"/>
+  <xacro:property name="link4_x" value="0.03"/>
+  <xacro:property name="link4_y" value="0.01"/>
+  <xacro:property name="link4_z" value="0.06"/>
+
+
+  <!-- Import all Gazebo-customization elements, including Gazebo colors -->
+  <!-- To run Gazebo sumulation(plugins,color in Gazebo...), this is needed -->
+  <!--just written in another XML named "myrobot.gazebo", can put content together here-->
+  <xacro:include filename="$(find myrobot)/urdf/myrobot.gazebo" />
+
+  <!-- Import Rviz colors -->
+  <xacro:include filename="$(find myrobot)/urdf/materials.xacro" />
+
+
+
+<!--fixing robot to Gazebo origin-->
+  <link name="world"/>
+
+  <joint name="fixed" type="fixed">
+    <parent link="world"/>
+    <child link="link0"/>
+  </joint>
+
+<!--Base link of robot arm-->
+  <link name="link0">
+
+     <visual>
+       <origin xyz="0 -0.037 0" rpy="0 0 ${PI}"/>
+       <geometry>
+        <mesh filename="package://myrobot/meshes/link00.stl" scale="0.001 0.001 0.001"/>
+       </geometry>
+       <material name="orange"/>
+	<!--this color tag is for Rviz-->
+	<!--color in gazebo is written in myrobot.gazebo-->
+     </visual>
+
+     <!-- <visual> -->
+       <!-- <origin xyz="0 -0.037 ${0.06/2}" rpy="0 0 0"/> -->
+       <!-- <geometry> -->
+         <!-- <box size="0.15 0.25 0.06"/> -->
+       <!-- </geometry> -->
+       <!-- <material name="orange"/> -->
+	<!--this color tag is for Rviz-->
+	<!--color in gazebo is written in myrobot.gazebo-->
+     <!-- </visual> -->
+
+     <collision>
+       <origin xyz="0 -0.037 0" rpy="0 0 ${PI}"/>
+       <geometry>
+        <!--<box size="0.15 0.25 0.06"/>-->
+        <mesh filename="package://myrobot/meshes/link00.stl" scale="0.001 0.001 0.001"/> 
+       </geometry>
+     </collision>
+     
+     <inertial>
+        <origin xyz="0 -0.037 ${0.06/2}" rpy="0 0 0"/>
+       <mass value="${link0_mass}"/>
+       <inertia 
+          ixx="1.0" ixy="0.0" ixz="0.0"
+          iyy="1.0" iyz="0.0"
+          izz="1.0"/>
+     </inertial>
+   </link>
+
+   <!--joint1-->
+  <joint name="joint1" type="revolute">
+    <parent link="link0"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="1.0" friction="1.33136"/>
+    <limit effort="4.20429" lower="${-PI}" upper="${PI}" velocity="2.93215"/>
+    <!--motor: JGB37-3530B gear_ratio=56 under 12v 80rpm stall=15kgf*cm-->
+    <!--gear_ratio motor to j1 = 40/14-->
+    <!-- effort: 0.15*9.81(N*m)*40/14-->
+    <!--velo:     80*2pi/60(rad/s)/(40/14)-->
+    <!--damp: after close_loop control ~1.0-->
+    <!--fric: tested start volt = 3.8v, so 3.8v/12v*4.20429-->
+  </joint>
+
+
+ <!--rotational base-->
+  <link name="link1">
+<!-- origin of link1 is joint 1 -->
+
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI}"/>
+      <geometry>
+        <mesh filename="package://myrobot/meshes/link1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+
+    <!-- <visual> -->
+      <!-- <origin xyz="0 0 ${0.082/2}" rpy="0 0 0"/> -->
+      <!-- <geometry> -->
+        <!-- <box size="0.01 0.01 0.082"/> -->
+      <!-- </geometry> -->
+      <!-- <material name="black"/> -->
+    <!-- </visual> -->
+
+    <collision>
+      <origin xyz="0 0 ${0.032/2}" rpy="0 0 0"/>
+      <geometry>
+      <box size="0.03 0.03 0.032"/>
+        <!-- <mesh filename="package://myrobot/meshes/link1.stl" scale="0.001 0.001 0.001"/> -->
+      </geometry>
+    </collision>
+    
+    <collision>
+      <origin xyz="0 0 ${0.032+0.05/2}" rpy="0 0 0"/>
+      <geometry>
+      <box size="0.19 0.03 0.05"/>
+        <!-- <mesh filename="package://myrobot/meshes/link1.stl" scale="0.001 0.001 0.001"/> -->
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0 0 ${0.082/2}" rpy="0 0 0"/>
+      <mass value="${link1_mass}"/>
+      <inertia
+          ixx="${link1_mass / 12.0 * (0.01*0.01*2)}" ixy="0.0" ixz="0.0"
+          iyy="0.0" iyz="0.0"
+          izz="${link1_mass / 12.0 * (0.01*0.01 + 0.082*0.082)}"/>
+    </inertial>
+    <!-- set 0 if no rotation of the axis to prevent Gazebo strange behavior -->
+  </link>
+
+  <!--joint2-->
+  <joint name="joint2" type="revolute">
+     <parent link="link1"/>
+     <child link="link2"/>
+     <origin xyz=" 0 0 0.082" rpy="0 0 0"/>
+     <axis xyz="1 0 0"/>
+     <dynamics damping="1.0" friction="2.329875"/>
+     <limit effort="7.3575" lower="${-PI}" upper="${PI}" velocity="1.675516"/>
+     <!--motor: JGB37-3530B gear_ratio=56 under 12v 80rpm stall=15kg*cm-->
+     <!--gear_ratio motor to j2 = 5.0-->
+     <!--effort: 0.15*9.81(N*m)*5-->
+     <!--velo:     80*2pi/60(rad/s)/5-->
+     <!--damp: after close_loop control ~1.0-->
+     <!--fric: tested start volt = 3.8v, so 3.8v/12v*7.3575-->
+   </joint>
+
+<!--link2-->
+<link name="link2">
+    
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI}"/>
+      <geometry>
+        <mesh filename="package://myrobot/meshes/link2.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="orange"/>
+    </visual>
+
+    <!-- <visual> -->
+      <!-- <origin xyz="0 0 0.066" rpy="0 0 0"/> -->
+      <!-- <geometry> -->
+        <!-- <box size="0.01 0.01 0.132"/> -->
+      <!-- </geometry> -->
+      <!-- <material name="orange"/> -->
+    <!-- </visual> -->
+
+   <collision>
+      <origin xyz="0 0 ${0.132/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.05 0.05 0.132"/>
+        <!-- <mesh filename="package://myrobot/meshes/link2.stl" scale="0.001 0.001 0.001"/> -->
+      </geometry>
+    </collision>
+
+    <inertial>
+     <origin xyz="0 0 ${0.132/2}" rpy="0 0 0"/>
+      <mass value="${link2_mass}"/>
+      <inertia
+          ixx="${link2_mass / 12.0 * (link2_z*link2_z + link2_y*link2_y)}" ixy="0.0" ixz="0.0"
+          iyy="0.0" iyz="0.0"
+          izz="${link2_mass / 12.0 * (link2_x*link2_x + link2_y*link2_y)}"/>
+    </inertial>
+    <!-- set 0 if no rotation of the axis to prevent Gazebo strange behavior -->
+  </link>
+
+  <!--joint3-->
+<joint name="joint3" type="revolute">
+     <parent link="link2"/>
+     <child link="link3"/>
+     <origin xyz="0 0 0.132" rpy="0 0 0"/>
+     <axis xyz="1 0 0"/>
+     <dynamics damping="1.0" friction="1.176032"/>
+     <limit effort="3.71378564" lower="${-PI}" upper="${PI}" velocity="3.885103"/>
+     <!--motor: JGB37-3530B gear_ratio=18.8 under 12v 265rpm stall=5.3kg*cm-->
+     <!--gear_ratio motor to j3 = 5*(20/14)=7.142857-->
+     <!--effort: 0.053*9.81(N*m)*7.142857-->
+     <!--velo:     265*2pi/60(rad/s)/7.142857-->
+     <!--damp: after close_loop control ~1.0-->
+     <!--fric: tested start volt = 3.8v, so 3.8v/12v*3.71378564-->
+   </joint>
+
+<!--link3-->
+<link name="link3">
+
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI}"/>
+      <geometry>
+        <mesh filename="package://myrobot/meshes/link3.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+
+    <!-- <visual> -->
+      <!-- <origin xyz="0 0 ${0.1664/2}" rpy="0 0 0"/> -->
+      <!-- <geometry> -->
+        <!-- <box size="0.01 0.01 0.1664"/> -->
+      <!-- </geometry> -->
+      <!-- <material name="black"/> -->
+    <!-- </visual> -->
+
+    <collision>
+      <origin xyz="0 0 ${0.1664/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.04 0.04 0.1664"/>
+        <!-- <mesh filename="package://myrobot/meshes/link3.stl" scale="0.001 0.001 0.001"/> -->
+      </geometry>
+    </collision>
+
+    <inertial>
+     <origin xyz="0 0 ${0.1664/2}" rpy="0 0 0"/>
+      <mass value="${link3_mass}"/>
+      <inertia
+          ixx="${link3_mass / 12.0 * (link3_z*link3_z + link3_y*link3_y)}" ixy="0.0" ixz="0.0"
+          iyy="0" iyz="0.0"
+          izz="${link3_mass / 12.0 * (link3_x*link3_x + link3_y*link3_y)}"/>
+    </inertial>
+    <!-- set 0 if no rotation of the axis to prevent Gazebo strange behavior -->
+  </link>
+
+<!--joint4-->
+   <joint name="joint4" type="revolute">
+     <parent link="link3"/>
+     <child link="link4"/>
+     <origin xyz="0 0 0.1664" rpy="0 0 0"/>
+     <axis xyz="1 0 0"/>
+     <dynamics damping="1.0" friction="0.07"/>
+     <limit effort="0.1962" lower="${-PI}" upper="${PI}" velocity="10.47198"/>
+     <!--motor: MG90S under 5v stall=2.0kg*cm  60deg/0.1sec-->
+     <!--gear_ratio motor to j4 = 1-->
+     <!--effort: 2/100*9.81(N*m) = 0.1962-->
+     <!--But 0.1962 performs weird in Gazebo, trial and error set 1.962-->
+     <!--velo:     10.47198-->
+     <!--damp:     ?-->
+     <!--fric:     ?-->
+   </joint>
+
+  <!--link4-->
+  <link name="link4">
+
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI}"/>
+      <geometry>
+        <mesh filename="package://myrobot/meshes/link4.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="orange"/>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 ${PI}"/>
+      <geometry>
+        <mesh filename="package://myrobot/meshes/link4.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+     <origin xyz="0 0 ${0.06/2}" rpy="0 0 ${PI}"/>
+      <mass value="${link4_mass}"/>
+      <inertia
+          ixx="${link4_mass / 12.0 * (link4_z*link4_z + link4_y*link4_y)}" ixy="0.0" ixz="0.0"
+          iyy="0" iyz="0.0"
+          izz="${link4_mass / 12.0 * (link4_x*link4_x + link4_y*link4_y)}"/>
+    </inertial>
+    <!-- set 0 if no rotation of the axis to prevent Gazebo strange behavior -->
+  </link>
+
+
+<transmission name="tran1">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="joint1">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <!-- <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface> -->
+    </joint>
+    <actuator name="motor1">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <!-- <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface> -->
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+<transmission name="tran2">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="joint2">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <!-- <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface> -->
+    </joint>
+    <actuator name="motor2">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <!-- <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface> -->
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+<transmission name="tran3">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="joint3">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <!-- <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface> -->
+    </joint>
+    <actuator name="motor3">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <!-- <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface> -->
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+
+<transmission name="tran4">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="joint4">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <!-- <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface> -->
+    </joint>
+    <actuator name="motor4">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+      <!-- <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface> -->
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>  
+
+</robot>
+

@@ -1,0 +1,7 @@
+# Default initial positions for robotarm's ros2_control fake system
+
+initial_positions:
+  joint1: 0
+  joint2: -1.570796327
+  joint3: 1.570796327
+  joint4: 0
