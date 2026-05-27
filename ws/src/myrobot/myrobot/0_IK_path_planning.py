@@ -54,6 +54,8 @@ class MoveGroupPythonInterface(Node):
             group_name=self.GROUP_NAME,
             num_planning_attempts=10,
             allowed_planning_time=5.0,
+            max_velocity_scaling_factor=0.1,
+            max_acceleration_scaling_factor=0.1,
             goal_constraints=[constraints],
         )
 
