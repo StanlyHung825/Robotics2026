@@ -18,7 +18,7 @@ Tower_base = 0.0014
 Tower_height = 0.025
 Tower_overlap = 0.015
 Tower_mesh_height = 0.02375
-End_effector_contact_offset = 0.0
+End_effector_contact_offset = 0.01
 
 # You may want to slightly change this.
 STATION_POSITIONS = (

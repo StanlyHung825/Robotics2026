@@ -41,8 +41,8 @@ class MoveGroupPythonInterface(Node):
         self.GROUP_NAME = "ldsc_arm"
         self.PLANNING_FRAME = "world"
         self.WAYPOINT_BLEND_RADIUS = 0.005
-        self.JOINT_GOAL_TOLERANCE = 0.03
-        self.JOINT_MATCH_TOLERANCE = 0.005
+        self.JOINT_GOAL_TOLERANCE = 0.005
+        self.JOINT_MATCH_TOLERANCE = 0.001
 
         self.action_client = ActionClient(self, MoveGroup, "move_action")
         self.sequence_action_client = None
@@ -291,8 +291,8 @@ class MoveGroupPythonInterface(Node):
             planner_id=planner_id,
             num_planning_attempts=10,
             allowed_planning_time=5.0,
-            max_velocity_scaling_factor=0.5,
-            max_acceleration_scaling_factor=0.5,
+            max_velocity_scaling_factor=0.7,
+            max_acceleration_scaling_factor=0.7,
             goal_constraints=[constraints],
         )
         if hasattr(request, "pipeline_id"):
