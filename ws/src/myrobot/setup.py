@@ -28,8 +28,10 @@ setup(
         "console_scripts": [
             "kb_control = myrobot.kb_control:main",
             # "moveit_real_arm_interface = myrobot.0_moveit_real_arm_interface:main",
+            "serial_with_st = myrobot.0_serial_with_ST:main",
+            "moveit_real_arm_interface = myrobot.0_moveit_real_arm_interface:main",
             "magnet_moveit_real_arm_interface = myrobot.0_magnet_moveit_real_arm_interface:main",
-            "IK_path_planning = myrobot.0_hanoi_path_planning:main",
+            "IK_path_planning = myrobot.0_IK_path_planning:main",
             "hanoi_planner = myrobot.0_hanoi_planner:main",
             "hanoi_spawn_objects = myrobot.0_hanoi_spawn_objects:main",
         ],
