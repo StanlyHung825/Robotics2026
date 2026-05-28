@@ -14,9 +14,11 @@ from rclpy.node import Node
 
 Joint_NAMES = ("joint1", "joint2", "joint3", "joint4")
 LINK_LENGTH = (0.0600, 0.0820, 0.1320, 0.1664, 0.0480, 0.0040)
-JOINT_GOAL_TOLERANCE = 0.01
-PLANNER_ID = "PTP"
-PLANNING_PIPELINE_ID = "pilz_industrial_motion_planner"
+JOINT_GOAL_TOLERANCE = 0.012
+PLANNER_ATTEMPTS = (
+    ("Pilz PTP", "PTP", "pilz_industrial_motion_planner"),
+    ("OMPL fallback", "", "ompl"),
+)
 JOINT_LIMITS = (
     (-1.2, 1.2),
     (-2.0, 2.0),
@@ -70,19 +72,29 @@ class MoveGroupPythonInterface(Node):
         self,
         joint_angles: tuple[float, float, float, float],
     ):
-        planned_trajectory = self._send_planning_goal(
-            joint_angles,
-            planner_id=PLANNER_ID,
-            planning_pipeline_id=PLANNING_PIPELINE_ID,
-        )
-        if planned_trajectory is None:
-            return None
-        if not self._trajectory_reaches_joint_goal(
-            planned_trajectory,
-            joint_angles,
-        ):
-            return None
-        return planned_trajectory
+        for planner_name, planner_id, planning_pipeline_id in PLANNER_ATTEMPTS:
+            self.get_logger().info(f"Trying {planner_name} planner")
+            planned_trajectory = self._send_planning_goal(
+                joint_angles,
+                planner_id=planner_id,
+                planning_pipeline_id=planning_pipeline_id,
+            )
+            if planned_trajectory is None:
+                continue
+            if not self._trajectory_reaches_joint_goal(
+                planned_trajectory,
+                joint_angles,
+            ):
+                self.get_logger().warn(
+                    f"{planner_name} produced a trajectory that does not reach "
+                    "the requested joint goal"
+                )
+                continue
+
+            self.get_logger().info(f"Using trajectory from {planner_name}")
+            return planned_trajectory
+
+        return None
 
     def _send_planning_goal(
         self,
