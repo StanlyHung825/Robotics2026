@@ -54,7 +54,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
     rm -rf /var/lib/apt/lists/*
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
-    pip install opencv-python
+    pip install opencv-python \
+    pyserial
 
 # Install useful ROS2 packages and dependency
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
