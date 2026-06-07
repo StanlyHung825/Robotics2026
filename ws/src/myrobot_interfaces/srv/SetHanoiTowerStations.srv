@@ -2,6 +2,7 @@
 # tower_stations[0] is tower1, tower_stations[1] is tower2, tower_stations[2] is tower3.
 # Valid station indexes are 0, 1, and 2.
 int32[3] tower_stations
+bool[2] obstacle
 
 # Station where all towers should be moved.
 int32 target_station
