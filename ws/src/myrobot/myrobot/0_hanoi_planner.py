@@ -2,6 +2,7 @@ import threading
 import time
 
 import rclpy
+from geometry_msgs.msg import Point, Pose, Quaternion
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
     Constraints,
@@ -17,7 +18,17 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
 
-from myrobot.hanoi_waypoint_planning import HOME_POSITION, JOINT_NAMES
+from myrobot.hanoi_waypoint_planning import (
+    HANOI_TOWER_NAMES,
+    HOME_POSITION,
+    JOINT_NAMES,
+    OBSTACLE_POSITIONS,
+    OBSTACLE_SIZE,
+    STATION_POSITIONS,
+    Tower_base,
+    Tower_height,
+    Tower_overlap,
+)
 from myrobot.moveit2_acm_management import MoveIt2AcmManager
 from myrobot.progress_handling import HanoiProgressHandler
 
@@ -28,6 +39,11 @@ except ImportError:
     MoveGroupSequence = None
     MotionSequenceItem = None
     MotionSequenceRequest = None
+
+
+BOX_SIZE = OBSTACLE_SIZE
+BOX_POSITIONS = OBSTACLE_POSITIONS
+BOX_NAMES = tuple(f"box_{index}" for index in range(1, len(BOX_POSITIONS) + 1))
 
 
 class MoveGroupPythonInterface(Node):
@@ -78,6 +94,7 @@ class MoveGroupPythonInterface(Node):
             node=self,
             motion_interface=self,
             scene_manager=self.scene_manager,
+            scene_initializer=self.spawn_hanoi_scene,
             callback_group=self.callback_group,
         )
 
@@ -267,6 +284,61 @@ class MoveGroupPythonInterface(Node):
 
     def detach_object(self, **kwargs) -> None:
         self.scene_manager.detach_object(**kwargs)
+
+    def spawn_hanoi_scene(
+        self,
+        tower_stations: tuple[int, ...],
+        obstacles: tuple[bool, ...],
+    ) -> None:
+        self.get_logger().info(
+            "Spawning Hanoi towers and obstacles in planning scene"
+        )
+
+        for tower_name in HANOI_TOWER_NAMES:
+            self.scene_manager.remove_attached_object(object_name=tower_name)
+        self.scene_manager.remove_world_objects((*HANOI_TOWER_NAMES, *BOX_NAMES))
+
+        stacks = self._build_stacks_from_tower_stations(tower_stations)
+        tower_spacing = Tower_height - Tower_overlap
+        for station_index, stack in enumerate(stacks):
+            station_x, station_y = STATION_POSITIONS[station_index]
+            for stack_index, tower_name in enumerate(stack):
+                self.scene_manager.add_world_mesh(
+                    object_name=tower_name,
+                    position=Point(
+                        x=station_x,
+                        y=station_y,
+                        z=Tower_base + stack_index * tower_spacing,
+                    ),
+                )
+
+        for index, enabled in enumerate(obstacles):
+            if index >= len(BOX_POSITIONS):
+                break
+            if not enabled:
+                continue
+
+            x, y, z = BOX_POSITIONS[index]
+            self.scene_manager.add_world_box(
+                object_name=BOX_NAMES[index],
+                pose=Pose(
+                    orientation=Quaternion(w=1.0),
+                    position=Point(x=x, y=y, z=z),
+                ),
+                size=BOX_SIZE,
+            )
+
+        self.scene_manager.allow_hanoi_contacts(log=False)
+        self.get_logger().info("Hanoi planning scene is ready")
+
+    @staticmethod
+    def _build_stacks_from_tower_stations(
+        tower_stations: tuple[int, ...],
+    ) -> list[list[str]]:
+        stacks: list[list[str]] = [[] for _ in STATION_POSITIONS]
+        for tower_name, station in zip(HANOI_TOWER_NAMES, tower_stations):
+            stacks[station].append(tower_name)
+        return stacks
 
     def _build_motion_plan_request(
         self,

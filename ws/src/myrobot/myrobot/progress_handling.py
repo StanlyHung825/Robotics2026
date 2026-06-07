@@ -1,4 +1,5 @@
 import time
+from collections.abc import Callable
 from typing import Any, Protocol
 
 from geometry_msgs.msg import Point
@@ -44,6 +45,9 @@ class HanoiProgressHandler:
         node: Any,
         motion_interface: HanoiMotionInterface,
         scene_manager: MoveIt2AcmManager,
+        scene_initializer: (
+            Callable[[tuple[int, ...], tuple[bool, ...]], None] | None
+        ) = None,
         planner: HanoiTowerWaypointPlanner | None = None,
         kinematics: ArmKinematics | None = None,
         callback_group: Any | None = None,
@@ -51,6 +55,7 @@ class HanoiProgressHandler:
         self._node = node
         self._motion = motion_interface
         self._scene_manager = scene_manager
+        self._scene_initializer = scene_initializer
         self._planner = planner or HanoiTowerWaypointPlanner()
         self._kinematics = kinematics or ArmKinematics()
         self._busy = False
@@ -77,11 +82,17 @@ class HanoiProgressHandler:
             return response
 
         tower_stations = tuple(int(station) for station in request.tower_stations)
+        obstacles = tuple(bool(enabled) for enabled in request.obstacle)
         target_station = int(request.target_station)
 
         self._busy = True
         try:
-            plan = self._planner.build_task_plan(tower_stations, target_station)
+            plan = self._planner.build_task_plan(
+                tower_stations,
+                target_station,
+                obstacles=obstacles,
+            )
+            self._initialize_scene(tower_stations, obstacles)
             self._log_plan_acceptance(plan, tower_stations, target_station)
 
             self.execute_waypoints(plan.waypoints)
@@ -104,6 +115,19 @@ class HanoiProgressHandler:
             self._busy = False
 
         return response
+
+    def _initialize_scene(
+        self,
+        tower_stations: tuple[int, ...],
+        obstacles: tuple[bool, ...],
+    ) -> None:
+        if self._scene_initializer is None:
+            return
+
+        self._motion.get_logger().info(
+            "Preparing Hanoi planning scene from service request"
+        )
+        self._scene_initializer(tower_stations, obstacles)
 
     def execute_waypoints(self, waypoints: list[HanoiWaypoint]) -> None:
         current_eef_state = False

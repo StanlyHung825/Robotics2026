@@ -30,14 +30,22 @@ NUM_DISKS = 3
 SOURCE_STATION = 1
 TARGET_STATION = 0
 APPROACH_HEIGHT = 0.1
+DIRECT_TRANSFER_CLEARANCE = 0.035
+OBSTACLE_TRANSFER_CLEARANCE = 0.035
 MOTION_DELAY = 0.1
 START_WAYPOINT_POSITION = (0.25, 0.0, 0.1)
 END_WAYPOINT_POSITION = (0.25, 0.1, 0.25)
 HANOI_TOWER_NAMES = tuple(f"tower{index}" for index in range(1, NUM_DISKS + 1))
+OBSTACLE_SIZE = (0.1, 0.001, 0.1)
+OBSTACLE_POSITIONS = (
+    (0.25, -0.075, 0.05),
+    (0.25, 0.075, 0.05),
+)
 
 SceneAction = Literal["attach", "detach"]
 HanoiMove = tuple[int, int]
 StationStacks = list[list[str]]
+ObstacleState = tuple[bool, ...]
 
 
 @dataclass(frozen=True)
@@ -183,6 +191,7 @@ class HanoiTowerWaypointPlanner:
         self,
         source: int = SOURCE_STATION,
         target: int = TARGET_STATION,
+        obstacles: ObstacleState | None = None,
     ) -> list[HanoiWaypoint]:
         auxiliary = self.get_auxiliary_station(source, target)
         moves = self.generate_hanoi_moves(
@@ -194,13 +203,18 @@ class HanoiTowerWaypointPlanner:
         stacks: StationStacks = [[] for _ in self.station_positions]
         stacks[source] = list(self.tower_names)
         return self._with_boundary_waypoints(
-            self.build_waypoints_from_moves(moves, stacks)
+            self.build_waypoints_from_moves(
+                moves,
+                stacks,
+                obstacles=obstacles,
+            )
         )
 
     def build_task_plan(
         self,
         tower_stations: tuple[int, ...],
         target_station: int,
+        obstacles: ObstacleState | None = None,
     ) -> HanoiTaskPlan:
         self.validate_request(tower_stations, target_station)
 
@@ -210,6 +224,7 @@ class HanoiTowerWaypointPlanner:
         collect_waypoints = self.build_waypoints_from_moves(
             collect_moves,
             initial_stacks,
+            obstacles=obstacles,
         )
 
         final_moves: list[HanoiMove] = []
@@ -228,6 +243,7 @@ class HanoiTowerWaypointPlanner:
             final_waypoints = self.build_waypoints_from_moves(
                 final_moves,
                 collected_stacks,
+                obstacles=obstacles,
             )
 
         return HanoiTaskPlan(
@@ -318,9 +334,11 @@ class HanoiTowerWaypointPlanner:
         self,
         moves: list[HanoiMove],
         initial_stacks: StationStacks,
+        obstacles: ObstacleState | None = None,
     ) -> list[HanoiWaypoint]:
         stacks = [stack.copy() for stack in initial_stacks]
         waypoints: list[HanoiWaypoint] = []
+        active_obstacles = self.active_obstacle_positions(obstacles)
 
         for source_index, target_index in moves:
             source_x, source_y = self.station_positions[source_index]
@@ -333,38 +351,174 @@ class HanoiTowerWaypointPlanner:
             tower_name = stacks[source_index].pop()
             self.validate_legal_move(tower_name, stacks[target_index])
             place_z = self.tower_top_z(len(stacks[target_index]) + 1)
-
-            source_approach_z = pick_z + self.approach_height
-            target_approach_z = place_z + self.approach_height
+            station_clearance_z = self.path_tower_clearance_z(
+                source_y,
+                target_y,
+                stacks,
+            )
 
             waypoints.extend(
-                [
-                    HanoiWaypoint(source_x, source_y, source_approach_z, False),
-                    HanoiWaypoint(
-                        source_x,
-                        source_y,
-                        pick_z,
-                        True,
-                        tower_name,
-                        "attach",
-                    ),
-                    HanoiWaypoint(source_x, source_y, source_approach_z, True),
-                    HanoiWaypoint(target_x, target_y, target_approach_z, True),
-                    HanoiWaypoint(
-                        target_x,
-                        target_y,
-                        place_z,
-                        False,
-                        tower_name,
-                        "detach",
-                    ),
-                    HanoiWaypoint(target_x, target_y, target_approach_z, False),
-                ]
+                self.build_transfer_waypoints(
+                    source=(source_x, source_y),
+                    target=(target_x, target_y),
+                    pick_z=pick_z,
+                    place_z=place_z,
+                    station_clearance_z=station_clearance_z,
+                    tower_name=tower_name,
+                    active_obstacles=active_obstacles,
+                )
             )
 
             stacks[target_index].append(tower_name)
 
         return waypoints
+
+    def build_transfer_waypoints(
+        self,
+        *,
+        source: tuple[float, float],
+        target: tuple[float, float],
+        pick_z: float,
+        place_z: float,
+        station_clearance_z: float,
+        tower_name: str,
+        active_obstacles: tuple[tuple[float, float, float], ...],
+    ) -> list[HanoiWaypoint]:
+        source_x, source_y = source
+        target_x, target_y = target
+        transit_z = self.transfer_height(
+            source_y=source_y,
+            target_y=target_y,
+            pick_z=pick_z,
+            place_z=place_z,
+            station_clearance_z=station_clearance_z,
+            active_obstacles=active_obstacles,
+        )
+
+        loaded_transit_waypoints = [
+            HanoiWaypoint(source_x, source_y, transit_z, True),
+        ]
+        loaded_transit_waypoints.extend(
+            HanoiWaypoint(obstacle_x, obstacle_y, transit_z, True)
+            for obstacle_x, obstacle_y, _ in self.crossed_obstacles(
+                source_y,
+                target_y,
+                active_obstacles,
+            )
+        )
+        loaded_transit_waypoints.append(
+            HanoiWaypoint(target_x, target_y, transit_z, True)
+        )
+
+        return [
+            HanoiWaypoint(source_x, source_y, transit_z, False),
+            HanoiWaypoint(
+                source_x,
+                source_y,
+                pick_z,
+                True,
+                tower_name,
+                "attach",
+            ),
+            *loaded_transit_waypoints,
+            HanoiWaypoint(
+                target_x,
+                target_y,
+                place_z,
+                False,
+                tower_name,
+                "detach",
+            ),
+            HanoiWaypoint(target_x, target_y, transit_z, False),
+        ]
+
+    def transfer_height(
+        self,
+        *,
+        source_y: float,
+        target_y: float,
+        pick_z: float,
+        place_z: float,
+        station_clearance_z: float,
+        active_obstacles: tuple[tuple[float, float, float], ...],
+    ) -> float:
+        if len(active_obstacles) >= 2:
+            return (
+                max(pick_z, place_z, station_clearance_z)
+                + self.approach_height
+            )
+
+        transit_z = (
+            max(pick_z, place_z, station_clearance_z)
+            + DIRECT_TRANSFER_CLEARANCE
+        )
+        crossed_obstacles = self.crossed_obstacles(
+            source_y,
+            target_y,
+            active_obstacles,
+        )
+        if not crossed_obstacles:
+            return transit_z
+
+        obstacle_top_z = max(
+            obstacle_z + OBSTACLE_SIZE[2] / 2.0
+            for _, _, obstacle_z in crossed_obstacles
+        )
+        return max(transit_z, obstacle_top_z + OBSTACLE_TRANSFER_CLEARANCE)
+
+    def path_tower_clearance_z(
+        self,
+        source_y: float,
+        target_y: float,
+        stacks: StationStacks,
+    ) -> float:
+        lower_y = min(source_y, target_y)
+        upper_y = max(source_y, target_y)
+        crossed_stack_sizes = [
+            len(stack)
+            for (_, station_y), stack in zip(self.station_positions, stacks)
+            if lower_y < station_y < upper_y
+        ]
+        if not crossed_stack_sizes:
+            return Tower_base
+
+        return max(
+            self.tower_top_z(stack_size)
+            for stack_size in crossed_stack_sizes
+        )
+
+    def crossed_obstacles(
+        self,
+        source_y: float,
+        target_y: float,
+        active_obstacles: tuple[tuple[float, float, float], ...],
+    ) -> tuple[tuple[float, float, float], ...]:
+        lower_y = min(source_y, target_y)
+        upper_y = max(source_y, target_y)
+        crossed = [
+            obstacle
+            for obstacle in active_obstacles
+            if lower_y < obstacle[1] < upper_y
+        ]
+
+        if source_y <= target_y:
+            crossed.sort(key=lambda obstacle: obstacle[1])
+        else:
+            crossed.sort(key=lambda obstacle: obstacle[1], reverse=True)
+        return tuple(crossed)
+
+    @staticmethod
+    def active_obstacle_positions(
+        obstacles: ObstacleState | None,
+    ) -> tuple[tuple[float, float, float], ...]:
+        if obstacles is None:
+            obstacles = tuple(True for _ in OBSTACLE_POSITIONS)
+
+        return tuple(
+            position
+            for enabled, position in zip(obstacles, OBSTACLE_POSITIONS)
+            if enabled
+        )
 
     def validate_request(
         self,
@@ -529,20 +683,31 @@ def build_hanoi_waypoints(
     num_disks: int = NUM_DISKS,
     source: int = SOURCE_STATION,
     target: int = TARGET_STATION,
+    obstacles: ObstacleState | None = None,
 ) -> list[HanoiWaypoint]:
     planner = HanoiTowerWaypointPlanner(num_disks=num_disks)
-    return planner.build_default_waypoints(source, target)
+    return planner.build_default_waypoints(source, target, obstacles=obstacles)
 
 
 def build_waypoints_from_moves(
     moves: list[HanoiMove],
     initial_stacks: StationStacks,
+    obstacles: ObstacleState | None = None,
 ) -> list[HanoiWaypoint]:
-    return _DEFAULT_PLANNER.build_waypoints_from_moves(moves, initial_stacks)
+    return _DEFAULT_PLANNER.build_waypoints_from_moves(
+        moves,
+        initial_stacks,
+        obstacles=obstacles,
+    )
 
 
 def build_hanoi_task_plan(
     tower_stations: tuple[int, ...],
     target_station: int,
+    obstacles: ObstacleState | None = None,
 ) -> HanoiTaskPlan:
-    return _DEFAULT_PLANNER.build_task_plan(tower_stations, target_station)
+    return _DEFAULT_PLANNER.build_task_plan(
+        tower_stations,
+        target_station,
+        obstacles=obstacles,
+    )

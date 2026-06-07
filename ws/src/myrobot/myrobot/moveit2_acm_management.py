@@ -16,7 +16,7 @@ from moveit_msgs.msg import (
 from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
 import rclpy
 import trimesh
-from shape_msgs.msg import Mesh, MeshTriangle
+from shape_msgs.msg import Mesh, MeshTriangle, SolidPrimitive
 from std_msgs.msg import Header
 
 from myrobot.hanoi_waypoint_planning import (
@@ -199,6 +199,35 @@ class MoveIt2AcmManager:
         self.wait_for_state_update()
         self.allow_hanoi_contacts(log=False)
 
+    def remove_world_objects(self, object_names: tuple[str, ...]) -> None:
+        if not object_names:
+            return
+
+        collision_objects = [
+            CollisionObject(
+                header=Header(
+                    frame_id=self._planning_frame,
+                    stamp=self._node.get_clock().now().to_msg(),
+                ),
+                id=object_name,
+                operation=CollisionObject.REMOVE,
+            )
+            for object_name in object_names
+        ]
+
+        planning_scene = PlanningScene(is_diff=True)
+        planning_scene.world.collision_objects = collision_objects
+        self._apply_planning_scene(planning_scene)
+
+        for collision_object in collision_objects:
+            self.collision_object_publisher.publish(collision_object)
+
+        self._node.get_logger().info(
+            f"Removed world objects: {', '.join(object_names)}"
+        )
+        self.wait_for_state_update()
+        self.allow_hanoi_contacts(log=False)
+
     def add_world_mesh(
         self,
         *,
@@ -220,6 +249,37 @@ class MoveIt2AcmManager:
         self._node.get_logger().info(
             f"Added world object: {object_name} at "
             f"({position.x:.3f}, {position.y:.3f}, {position.z:.3f})"
+        )
+        self.wait_for_state_update()
+        self.allow_hanoi_contacts(log=False)
+
+    def add_world_box(
+        self,
+        *,
+        object_name: str,
+        pose: Pose,
+        size: tuple[float, float, float],
+    ) -> None:
+        collision_object = CollisionObject(
+            header=Header(
+                frame_id=self._planning_frame,
+                stamp=self._node.get_clock().now().to_msg(),
+            ),
+            id=object_name,
+            primitives=[
+                SolidPrimitive(
+                    type=SolidPrimitive.BOX,
+                    dimensions=list(size),
+                )
+            ],
+            primitive_poses=[pose],
+            operation=CollisionObject.ADD,
+        )
+
+        self.collision_object_publisher.publish(collision_object)
+        self._node.get_logger().info(
+            f"Added world box: {object_name} at "
+            f"({pose.position.x:.3f}, {pose.position.y:.3f}, {pose.position.z:.3f})"
         )
         self.wait_for_state_update()
         self.allow_hanoi_contacts(log=False)
@@ -255,6 +315,23 @@ class MoveIt2AcmManager:
         self._node.get_logger().info(f"Attached object: {object_name} to {link_name}")
         self.wait_for_state_update()
         self.allow_hanoi_contacts(log=False)
+
+    def remove_attached_object(
+        self,
+        *,
+        object_name: str,
+        link_name: str = TOOL_LINK,
+    ) -> None:
+        attached_object = AttachedCollisionObject(
+            link_name=link_name,
+            object=CollisionObject(id=object_name, operation=CollisionObject.REMOVE),
+        )
+
+        self.attached_collision_object_publisher.publish(attached_object)
+        self._node.get_logger().info(
+            f"Removed attached object: {object_name} from {link_name}"
+        )
+        self.wait_for_state_update()
 
     def detach_object(
         self,
