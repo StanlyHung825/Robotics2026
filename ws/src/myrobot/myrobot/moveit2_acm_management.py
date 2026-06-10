@@ -359,12 +359,12 @@ class MoveIt2AcmManager:
             future = self.apply_planning_scene_client.call_async(
                 ApplyPlanningScene.Request(scene=planning_scene)
             )
-            if not self._wait_for_future(future, 2.0):
-                self._node.get_logger().warn(
+            if not self._wait_for_future(future, 5.0):
+                raise RuntimeError(
                     "Timed out while applying planning-scene update"
                 )
             elif future.result() is not None and not future.result().success:
-                self._node.get_logger().warn("MoveIt rejected the planning-scene update")
+                raise RuntimeError("MoveIt rejected the planning-scene update")
             return
 
         for _ in range(5):

@@ -197,16 +197,24 @@ class HanoiProgressHandler:
             return current_eef_state
 
         if waypoint.scene_action == "detach" and waypoint.tower_name is not None:
-            self._scene_manager.detach_object(
-                object_name=waypoint.tower_name,
-                world_position=Point(
-                    x=float(waypoint.x),
-                    y=float(waypoint.y),
-                    z=float(
+            world_position = waypoint.world_position
+            if world_position is None:
+                world_position = (
+                    float(waypoint.x),
+                    float(waypoint.y),
+                    float(
                         waypoint.z
                         - Tower_mesh_height
                         - End_effector_contact_offset
                     ),
+                )
+
+            self._scene_manager.detach_object(
+                object_name=waypoint.tower_name,
+                world_position=Point(
+                    x=float(world_position[0]),
+                    y=float(world_position[1]),
+                    z=float(world_position[2]),
                 ),
             )
             if current_eef_state:
@@ -245,5 +253,7 @@ class HanoiProgressHandler:
             f"Waypoint {index}/{total}: "
             f"x={waypoint.x:.3f}, y={waypoint.y:.3f}, z={waypoint.z:.3f}, "
             f"magnet={waypoint.magnet_on}, object={waypoint.tower_name}, "
-            f"scene_action={waypoint.scene_action}"
+            f"scene_action={waypoint.scene_action}, "
+            f"stop={waypoint.stop_at_waypoint}, "
+            f"world_position={waypoint.world_position}"
         )

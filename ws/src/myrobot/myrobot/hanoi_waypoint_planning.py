@@ -57,6 +57,7 @@ class HanoiWaypoint:
     tower_name: str | None = None
     scene_action: SceneAction | None = None
     stop_at_waypoint: bool = False
+    world_position: tuple[float, float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -356,6 +357,23 @@ class HanoiTowerWaypointPlanner:
                 target_y,
                 stacks,
             )
+            transit_z = self.transfer_height(
+                source_y=source_y,
+                target_y=target_y,
+                pick_z=pick_z,
+                place_z=place_z,
+                station_clearance_z=station_clearance_z,
+                active_obstacles=active_obstacles,
+            )
+
+            if waypoints:
+                waypoints.extend(
+                    self.build_empty_transfer_waypoints(
+                        source=(waypoints[-1].x, waypoints[-1].y, waypoints[-1].z),
+                        target=(source_x, source_y, transit_z),
+                        active_obstacles=active_obstacles,
+                    )
+                )
 
             waypoints.extend(
                 self.build_transfer_waypoints(
@@ -366,6 +384,7 @@ class HanoiTowerWaypointPlanner:
                     station_clearance_z=station_clearance_z,
                     tower_name=tower_name,
                     active_obstacles=active_obstacles,
+                    transit_z=transit_z,
                 )
             )
 
@@ -383,23 +402,31 @@ class HanoiTowerWaypointPlanner:
         station_clearance_z: float,
         tower_name: str,
         active_obstacles: tuple[tuple[float, float, float], ...],
+        transit_z: float | None = None,
     ) -> list[HanoiWaypoint]:
         source_x, source_y = source
         target_x, target_y = target
-        transit_z = self.transfer_height(
-            source_y=source_y,
-            target_y=target_y,
-            pick_z=pick_z,
-            place_z=place_z,
-            station_clearance_z=station_clearance_z,
-            active_obstacles=active_obstacles,
-        )
+        if transit_z is None:
+            transit_z = self.transfer_height(
+                source_y=source_y,
+                target_y=target_y,
+                pick_z=pick_z,
+                place_z=place_z,
+                station_clearance_z=station_clearance_z,
+                active_obstacles=active_obstacles,
+            )
 
         loaded_transit_waypoints = [
             HanoiWaypoint(source_x, source_y, transit_z, True),
         ]
         loaded_transit_waypoints.extend(
-            HanoiWaypoint(obstacle_x, obstacle_y, transit_z, True)
+            HanoiWaypoint(
+                obstacle_x,
+                obstacle_y,
+                transit_z,
+                True,
+                stop_at_waypoint=True,
+            )
             for obstacle_x, obstacle_y, _ in self.crossed_obstacles(
                 source_y,
                 target_y,
@@ -426,11 +453,79 @@ class HanoiTowerWaypointPlanner:
                 target_y,
                 place_z,
                 False,
+            ),
+            HanoiWaypoint(
+                target_x,
+                target_y,
+                transit_z,
+                False,
                 tower_name,
                 "detach",
+                True,
+                (
+                    target_x,
+                    target_y,
+                    place_z - Tower_mesh_height - End_effector_contact_offset,
+                ),
             ),
-            HanoiWaypoint(target_x, target_y, transit_z, False),
         ]
+
+    def build_empty_transfer_waypoints(
+        self,
+        *,
+        source: tuple[float, float, float],
+        target: tuple[float, float, float],
+        active_obstacles: tuple[tuple[float, float, float], ...],
+    ) -> list[HanoiWaypoint]:
+        source_x, source_y, source_z = source
+        target_x, target_y, target_z = target
+
+        if abs(source_y - target_y) < 1e-9:
+            return []
+
+        transit_z = self.empty_transfer_height(
+            source_y=source_y,
+            target_y=target_y,
+            source_z=source_z,
+            target_z=target_z,
+            active_obstacles=active_obstacles,
+        )
+        waypoints = []
+        if abs(source_z - transit_z) > 1e-9:
+            waypoints.append(
+                HanoiWaypoint(
+                    source_x,
+                    source_y,
+                    transit_z,
+                    False,
+                    stop_at_waypoint=True,
+                )
+            )
+
+        waypoints.extend(
+            HanoiWaypoint(
+                obstacle_x,
+                obstacle_y,
+                transit_z,
+                False,
+                stop_at_waypoint=True,
+            )
+            for obstacle_x, obstacle_y, _ in self.crossed_obstacles(
+                source_y,
+                target_y,
+                active_obstacles,
+            )
+        )
+        waypoints.append(
+            HanoiWaypoint(
+                target_x,
+                target_y,
+                transit_z,
+                False,
+                stop_at_waypoint=True,
+            )
+        )
+        return waypoints
 
     def transfer_height(
         self,
@@ -452,6 +547,30 @@ class HanoiTowerWaypointPlanner:
             max(pick_z, place_z, station_clearance_z)
             + DIRECT_TRANSFER_CLEARANCE
         )
+        crossed_obstacles = self.crossed_obstacles(
+            source_y,
+            target_y,
+            active_obstacles,
+        )
+        if not crossed_obstacles:
+            return transit_z
+
+        obstacle_top_z = max(
+            obstacle_z + OBSTACLE_SIZE[2] / 2.0
+            for _, _, obstacle_z in crossed_obstacles
+        )
+        return max(transit_z, obstacle_top_z + OBSTACLE_TRANSFER_CLEARANCE)
+
+    def empty_transfer_height(
+        self,
+        *,
+        source_y: float,
+        target_y: float,
+        source_z: float,
+        target_z: float,
+        active_obstacles: tuple[tuple[float, float, float], ...],
+    ) -> float:
+        transit_z = max(source_z, target_z)
         crossed_obstacles = self.crossed_obstacles(
             source_y,
             target_y,

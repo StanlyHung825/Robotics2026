@@ -56,7 +56,7 @@ class MoveGroupPythonInterface(Node):
 
         self.GROUP_NAME = "ldsc_arm"
         self.PLANNING_FRAME = "world"
-        self.WAYPOINT_BLEND_RADIUS = 0.005
+        self.WAYPOINT_BLEND_RADIUS = 0.0
         self.JOINT_GOAL_TOLERANCE = 0.005
         self.JOINT_MATCH_TOLERANCE = 0.001
 
@@ -196,15 +196,17 @@ class MoveGroupPythonInterface(Node):
             )
             return self._go_through_joint_states_with_stops(joint_angle_sequence)
 
-        if self._execute_joint_sequence(
-            joint_angle_sequence,
-            blend_radius=self.WAYPOINT_BLEND_RADIUS,
-        ):
-            return True
+        if self.WAYPOINT_BLEND_RADIUS > 0.0:
+            if self._execute_joint_sequence(
+                joint_angle_sequence,
+                blend_radius=self.WAYPOINT_BLEND_RADIUS,
+            ):
+                return True
 
-        self.get_logger().warn(
-            "Blended waypoint sequence failed; retrying without blend radius"
-        )
+            self.get_logger().warn(
+                "Blended waypoint sequence failed; retrying without blend radius"
+            )
+
         if self._execute_joint_sequence(joint_angle_sequence, blend_radius=0.0):
             return True
 
@@ -361,7 +363,7 @@ class MoveGroupPythonInterface(Node):
         request = MotionPlanRequest(
             group_name=self.GROUP_NAME,
             planner_id=planner_id,
-            num_planning_attempts=10,
+            num_planning_attempts=20,
             allowed_planning_time=5.0,
             max_velocity_scaling_factor=0.7,
             max_acceleration_scaling_factor=0.7,
