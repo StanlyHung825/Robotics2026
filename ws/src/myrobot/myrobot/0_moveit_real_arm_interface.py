@@ -6,7 +6,7 @@ from control_msgs.action import FollowJointTrajectory
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Bool, Float64MultiArray
 
 JOINT_NAMES = ("joint1", "joint2", "joint3", "joint4")
 DEFAULT_ACTION_NAME = "ldsc_arm_controller/follow_joint_trajectory"
@@ -39,6 +39,7 @@ def offset_angle(cmd: Sequence[float]) -> list[float]:
 class MoveitRealArmInterface(Node):
     def __init__(self):
         super().__init__("joint_position_pub")
+        self.eef_state: bool = False
 
         self.declare_parameter("action_name", DEFAULT_ACTION_NAME)
         action_name = (
@@ -47,6 +48,7 @@ class MoveitRealArmInterface(Node):
         )
 
         self.pub = self.create_publisher(Float64MultiArray, "/real_robot_arm_joint", 10)
+        self.eef_sub = self.create_subscription(Bool, "/SetEndEffector", self.eef_callback, 10)
 
         self.action_server = ActionServer(
             self,
@@ -63,6 +65,9 @@ class MoveitRealArmInterface(Node):
     def destroy_node(self):
         self.action_server.destroy()
         super().destroy_node()
+
+    def eef_callback(self, msg: Bool):
+        self.eef_state = msg.data
 
     def goal_callback(self, goal_request):
         trajectory = goal_request.trajectory
@@ -96,6 +101,7 @@ class MoveitRealArmInterface(Node):
 
         start_time = self._trajectory_start_time(trajectory)
         joint_indices = [trajectory.joint_names.index(name) for name in JOINT_NAMES]
+        include_eef_state = True
 
         for point in trajectory.points:
             if goal_handle.is_cancel_requested:
@@ -114,7 +120,11 @@ class MoveitRealArmInterface(Node):
             time.sleep(max(0.0, wait - time.monotonic()))
 
             positions = [point.positions[index] for index in joint_indices]
-            self.pub.publish(Float64MultiArray(data=offset_angle(positions)))
+            cmd = offset_angle(positions)
+            if include_eef_state:
+                cmd += [float(self.eef_state)]
+                include_eef_state = False
+            self.pub.publish(Float64MultiArray(data=cmd))
             self.get_logger().info(
                 f"t: {point.time_from_start}; cmd: {positions}"
             )
