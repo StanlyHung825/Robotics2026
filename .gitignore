@@ -62,5 +62,5 @@ rosbag2_*/
 Thumbs.db
 
 # Local tool metadata
-.agents/
-.codex/
+.docs
+AGENTS.md
