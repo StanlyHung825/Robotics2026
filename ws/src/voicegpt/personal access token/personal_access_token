@@ -1,0 +1,6 @@
+YOUR_GITHUB_TOKEN_HERE
+
+export GITHUB_TOKEN="YOUR_GITHUB_TOKEN_HERE"
+cd ~/ros2_ws
+source install/setup.bash
+ros2 launch voicegpt lab2.launch.py

@@ -1,0 +1,9 @@
+# Request: 空
+---
+# Response: 1=A區, 2=B區, 3=C區, 0=未找到
+int32 large_pos
+int32 medium_pos
+int32 small_pos
+int32 target_pos
+int32 left_obstacle
+int32 right_obstacle

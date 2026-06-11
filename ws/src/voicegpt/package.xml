@@ -1,18 +1,14 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>myrobot</name>
+  <name>voicegpt</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="jackson4771@gapp.nthu.edu.tw">jail487</maintainer>
+  <maintainer email="104kpf@gmail.com">ldsc</maintainer>
   <license>TODO: License declaration</license>
 
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>cv_bridge</exec_depend>
-  <exec_depend>hanoi_interface</exec_depend>
-  <exec_depend>myrobot_interfaces</exec_depend>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

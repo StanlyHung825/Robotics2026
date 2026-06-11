@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(turtle_square)
+project(hanoi_interface)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -7,25 +7,14 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(turtlesim REQUIRED)
-find_package(geometry_msgs REQUIRED)
+# uncomment the following section in order to fill in
+# further dependencies manually.
+# find_package(<dependency> REQUIRED)
 
-set(THIS_PACKAGE_DEPS
-  rclcpp
-  geometry_msgs
-  turtlesim
-)
+find_package(rosidl_default_generators REQUIRED)
 
-include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-)
-
-add_executable(turtle_square_node src/turtle-square_node.cpp)
-ament_target_dependencies(turtle_square_node ${THIS_PACKAGE_DEPS})
-install(TARGETS turtle_square_node
-  DESTINATION lib/${PROJECT_NAME}
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/GetHanoiStatus.srv"
 )
 
 if(BUILD_TESTING)
