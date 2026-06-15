@@ -15,28 +15,28 @@ HOME_POSITION = (0.0, -pi / 2, pi / 2, 0.0)
 
 # You can measure these in Lab402.
 Tower_base = 0.0014
-Tower_height = 0.025
-Tower_overlap = 0.015
-Tower_mesh_height = 0.02375
-End_effector_contact_offset = 0.01
+Tower_height = 0.03
+Tower_overlap = 0.010
+Tower_mesh_height = 0.02
+End_effector_contact_offset = 0.0
 
 # You may want to slightly change this.
 STATION_POSITIONS = (
     (0.25, 0.15),
     (0.25, 0.0),
-    (0.25, -0.15),
+    (0.25, -0.165),
 )
 NUM_DISKS = 3
 SOURCE_STATION = 1
 TARGET_STATION = 0
-APPROACH_HEIGHT = 0.1
+APPROACH_HEIGHT = 0.15
 DIRECT_TRANSFER_CLEARANCE = 0.035
 OBSTACLE_TRANSFER_CLEARANCE = 0.035
-MOTION_DELAY = 0.1
-START_WAYPOINT_POSITION = (0.25, 0.0, 0.1)
+MOTION_DELAY = 0.03
+START_WAYPOINT_POSITION = (0.25, 0.0, 0.20)
 END_WAYPOINT_POSITION = (0.25, 0.1, 0.25)
 HANOI_TOWER_NAMES = tuple(f"tower{index}" for index in range(1, NUM_DISKS + 1))
-OBSTACLE_SIZE = (0.1, 0.001, 0.1)
+OBSTACLE_SIZE = (0.12, 0.001, 0.15)
 OBSTACLE_POSITIONS = (
     (0.25, -0.075, 0.05),
     (0.25, 0.075, 0.05),
@@ -453,12 +453,6 @@ class HanoiTowerWaypointPlanner:
                 target_y,
                 place_z,
                 False,
-            ),
-            HanoiWaypoint(
-                target_x,
-                target_y,
-                transit_z,
-                False,
                 tower_name,
                 "detach",
                 True,
@@ -468,6 +462,7 @@ class HanoiTowerWaypointPlanner:
                     place_z - Tower_mesh_height - End_effector_contact_offset,
                 ),
             ),
+            HanoiWaypoint(target_x, target_y, transit_z, False),
         ]
 
     def build_empty_transfer_waypoints(

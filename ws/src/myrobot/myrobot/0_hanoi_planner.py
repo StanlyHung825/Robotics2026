@@ -50,13 +50,14 @@ class MoveGroupPythonInterface(Node):
     def __init__(self, executor: MultiThreadedExecutor):
         super().__init__("move_group_python_interface")
 
+        self.initialized = False
         self.joint_angles: list[float] | None = None
         self._executor = executor
         self.callback_group = ReentrantCallbackGroup()
 
         self.GROUP_NAME = "ldsc_arm"
         self.PLANNING_FRAME = "world"
-        self.WAYPOINT_BLEND_RADIUS = 0.0
+        self.WAYPOINT_BLEND_RADIUS = 0.002
         self.JOINT_GOAL_TOLERANCE = 0.005
         self.JOINT_MATCH_TOLERANCE = 0.001
 
@@ -105,6 +106,7 @@ class MoveGroupPythonInterface(Node):
         self.get_logger().info("MoveGroup Python Interface already initialized")
         self.get_logger().info("Waiting for /set_hanoi_tower_stations requests")
         self.scene_manager.allow_hanoi_contacts()
+        self.initialized = True
 
     @property
     def hanoi_busy(self) -> bool:
@@ -120,6 +122,8 @@ class MoveGroupPythonInterface(Node):
     def wait_for_future(self, future, timeout_sec: float = 30.0) -> bool:
         start_time = time.time()
         while rclpy.ok() and not future.done():
+            if not getattr(self, "initialized", False):
+                rclpy.spin_once(self, timeout_sec=0.01)
             if (time.time() - start_time) > timeout_sec:
                 return False
             time.sleep(0.01)

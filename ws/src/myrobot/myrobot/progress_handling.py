@@ -197,6 +197,10 @@ class HanoiProgressHandler:
             return current_eef_state
 
         if waypoint.scene_action == "detach" and waypoint.tower_name is not None:
+            if current_eef_state:
+                self._motion.switch_magnet(False)
+                current_eef_state = False
+
             world_position = waypoint.world_position
             if world_position is None:
                 world_position = (
@@ -217,9 +221,6 @@ class HanoiProgressHandler:
                     z=float(world_position[2]),
                 ),
             )
-            if current_eef_state:
-                self._motion.switch_magnet(False)
-                return False
             return current_eef_state
 
         if waypoint.magnet_on != current_eef_state:

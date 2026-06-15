@@ -279,7 +279,6 @@ class HanoiCoordinator(Node):
                         print(f"  ● 障礙物: 左={man_left}, 右={man_right}")
                         
                         # Direct Execution
-                        self.spawn_scene_objects(active_towers, left_obstacle, right_obstacle)
                         print("🚀 發送規劃請求中...")
                         start_time = time.time()
                         success = self.trigger_hanoi_planner(active_towers, target_station, left_obstacle, right_obstacle)
@@ -385,9 +384,6 @@ class HanoiCoordinator(Node):
                         print("❌ 輸入格式錯誤，請輸入整數 0, 1 或 2，設定取消。")
                         prompt_printed = False
                         continue
-                
-                # Spawn scene objects
-                self.spawn_scene_objects(active_towers, left_obstacle, right_obstacle)
                 
                 # Start planning
                 print("🚀 發送規劃請求中...")

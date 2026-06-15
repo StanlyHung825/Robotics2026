@@ -35,6 +35,7 @@ setup(
             'hanoi_status_to_sim = myrobot.hanoi_spawn_from_status:main',
             'hanoi_planner = myrobot.0_hanoi_planner:main',
             'hanoi_spawn_objects = myrobot.0_hanoi_spawn_objects:main',
+            'IK_path_planning = myrobot.0_IK_path_planning:main',
             'magnet_moveit_real_arm_interface = myrobot.0_magnet_moveit_real_arm_interface:main',
             'magnet_serial_with_ST = myrobot.0_magnet_serial_with_ST:main',
             'hanoi_coordinator = myrobot.hanoi_coordinator:main',

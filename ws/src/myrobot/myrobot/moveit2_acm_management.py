@@ -356,25 +356,36 @@ class MoveIt2AcmManager:
 
     def _apply_planning_scene(self, planning_scene: PlanningScene) -> None:
         if self.apply_planning_scene_client.wait_for_service(timeout_sec=1.0):
-            future = self.apply_planning_scene_client.call_async(
-                ApplyPlanningScene.Request(scene=planning_scene)
-            )
-            if not self._wait_for_future(future, 5.0):
-                raise RuntimeError(
-                    "Timed out while applying planning-scene update"
+            for attempt in range(3):
+                future = self.apply_planning_scene_client.call_async(
+                    ApplyPlanningScene.Request(scene=planning_scene)
                 )
-            elif future.result() is not None and not future.result().success:
-                raise RuntimeError("MoveIt rejected the planning-scene update")
+                if not self._wait_for_future(future, 5.0):
+                    raise RuntimeError(
+                        "Timed out while applying planning-scene update"
+                    )
+                elif future.result() is not None and future.result().success:
+                    return
+                
+                self._node.get_logger().warn(
+                    f"MoveIt rejected the planning-scene update (attempt {attempt + 1}/3), retrying in 0.5s..."
+                )
+                time.sleep(0.5)
+            
+            self._node.get_logger().error(
+                "MoveIt rejected the planning-scene update after 3 attempts. Proceeding with warning..."
+            )
             return
 
         for _ in range(5):
             self.planning_scene_publisher.publish(planning_scene)
             time.sleep(0.1)
 
-    @staticmethod
-    def _default_wait_for_future(future: Any, timeout_sec: float = 30.0) -> bool:
+    def _default_wait_for_future(self, future: Any, timeout_sec: float = 30.0) -> bool:
         start_time = time.time()
         while rclpy.ok() and not future.done():
+            if not getattr(self._node, "initialized", False):
+                rclpy.spin_once(self._node, timeout_sec=0.01)
             if (time.time() - start_time) > timeout_sec:
                 return False
             time.sleep(0.01)
