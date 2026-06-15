@@ -54,15 +54,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
     rm -rf /var/lib/apt/lists/*
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
-    pip install opencv-python \
-    pyserial
+    apt-get update && \
+    apt-get install -y portaudio19-dev python3-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install useful ROS2 packages and dependency
 RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
     apt-get update && \
     apt-get install -y \
     ros-$ROS_DISTRO-geometry-msgs \
-    ros-$ROS_DISTRO-turtlesim &&\
+    ros-$ROS_DISTRO-turtlesim \
+    ros-$ROS_DISTRO-usb-cam &&\
     rm -rf /var/lib/apt/lists/*
 
 # Install gazebo
@@ -83,12 +85,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
     ros-humble-moveit \
     ros-humble-moveit-planners-ompl \
     ros-humble-moveit-simple-controller-manager && \
-    pip3 install trimesh
+    pip3 install "numpy<2" "opencv-python<4.7.0" "opencv-contrib-python<4.7.0" trimesh pyserial azure-ai-inference SpeechRecognition PyAudio
 
 
 # Create a non-root user to use the container
 RUN groupadd --gid ${USERGID} ${USERNAME} \
     && useradd --uid ${USERID} --gid ${USERGID} -m ${USERNAME} -s /bin/bash \
+    && usermod -aG video,dialout,audio ${USERNAME} \
     && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 RUN apt update && DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends tzdata

@@ -11,6 +11,9 @@ services:
     stdin_open: true
     stop_grace_period: &STOP_GRACE_PERIOD 1s
 
+    env_file:
+      - .env
+
     volumes:
       - ../ws:/home/user/ws
       - /tmp/.X11-unix:/tmp/.X11-unix
@@ -26,4 +29,3 @@ services:
       - DISPLAY=${DISPLAY}  # Set display environment variable
       - RCUTILS_COLORIZED_OUTPUT=1
       - XAUTHORITY=/home/user/.Xauthority   # Set Xauthority path
-      - ROS_DOMAIN_ID=0  # ! Please distinguish the domain ID with other containers
