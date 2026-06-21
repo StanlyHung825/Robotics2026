@@ -5,15 +5,17 @@ from typing import Any, Protocol
 from geometry_msgs.msg import Point
 from myrobot_interfaces.srv import SetHanoiTowerStations
 
-from myrobot.hanoi_waypoint_planning import (
-    ArmKinematics,
+from myrobot.hanoi_kinematics import ArmKinematics
+from myrobot.hanoi_model import (
     End_effector_contact_offset,
     HOME_POSITION,
+    MOTION_DELAY,
+    Tower_mesh_height,
+)
+from myrobot.hanoi_waypoint_planning import (
     HanoiTaskPlan,
     HanoiTowerWaypointPlanner,
     HanoiWaypoint,
-    MOTION_DELAY,
-    Tower_mesh_height,
 )
 from myrobot.moveit2_acm_management import MoveIt2AcmManager
 
@@ -50,6 +52,7 @@ class HanoiProgressHandler:
         ) = None,
         planner: HanoiTowerWaypointPlanner | None = None,
         kinematics: ArmKinematics | None = None,
+        motion_delay: float = MOTION_DELAY,
         callback_group: Any | None = None,
     ) -> None:
         self._node = node
@@ -58,6 +61,7 @@ class HanoiProgressHandler:
         self._scene_initializer = scene_initializer
         self._planner = planner or HanoiTowerWaypointPlanner()
         self._kinematics = kinematics or ArmKinematics()
+        self._motion_delay = max(0.0, float(motion_delay))
         self._busy = False
 
         self.service = node.create_service(
@@ -148,7 +152,8 @@ class HanoiProgressHandler:
                 current_eef_state,
             )
             motion_segment = []
-            time.sleep(MOTION_DELAY)
+            if self._motion_delay > 0.0:
+                time.sleep(self._motion_delay)
 
         if motion_segment:
             self._execute_motion_segment(motion_segment)

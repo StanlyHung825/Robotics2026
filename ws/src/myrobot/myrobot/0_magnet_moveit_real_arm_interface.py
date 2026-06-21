@@ -1,4 +1,3 @@
-import math
 import threading
 from collections.abc import Sequence
 
@@ -7,31 +6,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64MultiArray
 
-JOINT_NAMES = ("joint1", "joint2", "joint3", "joint4")
-
-# difference btw ST-initialize-zero and Moveit-zero-point
-OFFSETs = (0.0, -math.pi / 2, math.pi / 2, 0.0)
-
-
-def offset_angle(cmd: Sequence[float]) -> list[float]:
-    """
-    The same initial pose of real arm btw ST and Moveit
-            |
-            |
-        ____|
-        |
-    =========
-
-    but their data differ:
-
-        ST          Moveit_plan
-        j1:0        j1:0
-        j2:0        j2:-1.5708       ---> j2(ST) = j2(Moveit) -1.5708
-        j3:0        j3:1.5708        ---> j3(ST) = j3(Moveit) +1.5708
-        j4:0        j4:0
-    """
-    assert len(cmd) == 4, "Command must have 4 elements"
-    return [cmdi - offset for cmdi, offset in zip(cmd, OFFSETs)]
+from myrobot.hanoi_model import JOINT_NAMES, offset_angle
 
 
 class MoveitRealArmInterface(Node):

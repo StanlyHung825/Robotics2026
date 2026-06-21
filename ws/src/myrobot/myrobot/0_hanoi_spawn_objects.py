@@ -3,7 +3,7 @@ from myrobot_interfaces.srv import SetHanoiTowerStations
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 
-from myrobot.hanoi_waypoint_planning import (
+from myrobot.hanoi_model import (
     HANOI_TOWER_NAMES,
     OBSTACLE_POSITIONS,
     STATION_POSITIONS,

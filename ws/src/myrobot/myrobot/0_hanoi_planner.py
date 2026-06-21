@@ -18,10 +18,11 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
 
-from myrobot.hanoi_waypoint_planning import (
+from myrobot.hanoi_model import (
     HANOI_TOWER_NAMES,
     HOME_POSITION,
     JOINT_NAMES,
+    MOTION_DELAY,
     OBSTACLE_POSITIONS,
     OBSTACLE_SIZE,
     STATION_POSITIONS,
@@ -29,6 +30,7 @@ from myrobot.hanoi_waypoint_planning import (
     Tower_height,
     Tower_overlap,
 )
+from myrobot.hanoi_waypoint_planning import HanoiTowerWaypointPlanner
 from myrobot.moveit2_acm_management import MoveIt2AcmManager
 from myrobot.progress_handling import HanoiProgressHandler
 
@@ -57,7 +59,46 @@ class MoveGroupPythonInterface(Node):
 
         self.GROUP_NAME = "ldsc_arm"
         self.PLANNING_FRAME = "world"
-        self.WAYPOINT_BLEND_RADIUS = 0.002
+        self.declare_parameter("waypoint_blend_radius", 0.00)
+        self.declare_parameter("motion_delay", MOTION_DELAY)
+        self.declare_parameter("stop_at_transfer_waypoints", False)
+        self.declare_parameter("stop_at_boundary_waypoints", False)
+        self.declare_parameter("ompl_fallback_enabled", True)
+        self.declare_parameter(
+            "pilz_planning_pipeline_id",
+            "pilz_industrial_motion_planner",
+        )
+        self.declare_parameter("pilz_planner_id", "PTP")
+        self.declare_parameter("ompl_planning_pipeline_id", "ompl")
+        self.declare_parameter("ompl_planner_id", "RRTConnectkConfigDefault")
+        self.declare_parameter("planning_attempts", 20)
+        self.declare_parameter("allowed_planning_time", 5.0)
+
+        self.WAYPOINT_BLEND_RADIUS = float(
+            self.get_parameter("waypoint_blend_radius").value
+        )
+        self.MOTION_DELAY = float(self.get_parameter("motion_delay").value)
+        self.STOP_AT_TRANSFER_WAYPOINTS = bool(
+            self.get_parameter("stop_at_transfer_waypoints").value
+        )
+        self.STOP_AT_BOUNDARY_WAYPOINTS = bool(
+            self.get_parameter("stop_at_boundary_waypoints").value
+        )
+        self.OMPL_FALLBACK_ENABLED = bool(
+            self.get_parameter("ompl_fallback_enabled").value
+        )
+        self.PILZ_PLANNING_PIPELINE_ID = str(
+            self.get_parameter("pilz_planning_pipeline_id").value
+        )
+        self.PILZ_PLANNER_ID = str(self.get_parameter("pilz_planner_id").value)
+        self.OMPL_PLANNING_PIPELINE_ID = str(
+            self.get_parameter("ompl_planning_pipeline_id").value
+        )
+        self.OMPL_PLANNER_ID = str(self.get_parameter("ompl_planner_id").value)
+        self.PLANNING_ATTEMPTS = int(self.get_parameter("planning_attempts").value)
+        self.ALLOWED_PLANNING_TIME = float(
+            self.get_parameter("allowed_planning_time").value
+        )
         self.JOINT_GOAL_TOLERANCE = 0.005
         self.JOINT_MATCH_TOLERANCE = 0.001
 
@@ -96,6 +137,11 @@ class MoveGroupPythonInterface(Node):
             motion_interface=self,
             scene_manager=self.scene_manager,
             scene_initializer=self.spawn_hanoi_scene,
+            planner=HanoiTowerWaypointPlanner(
+                stop_at_transfer_waypoints=self.STOP_AT_TRANSFER_WAYPOINTS,
+                stop_at_boundary_waypoints=self.STOP_AT_BOUNDARY_WAYPOINTS,
+            ),
+            motion_delay=self.MOTION_DELAY,
             callback_group=self.callback_group,
         )
 
@@ -103,9 +149,11 @@ class MoveGroupPythonInterface(Node):
         self._wait_for_trajectory_action_server()
         self._wait_for_sequence_action_server()
 
+        self.scene_manager.preload_hanoi_tower_meshes()
+        self.scene_manager.allow_hanoi_contacts()
+
         self.get_logger().info("MoveGroup Python Interface already initialized")
         self.get_logger().info("Waiting for /set_hanoi_tower_stations requests")
-        self.scene_manager.allow_hanoi_contacts()
         self.initialized = True
 
     @property
@@ -137,37 +185,70 @@ class MoveGroupPythonInterface(Node):
             self.get_logger().info("Target joint state is already reached; skipping")
             return True
 
+        if self._execute_single_joint_goal(
+            joint_angles,
+            planner_id=self.PILZ_PLANNER_ID,
+            planning_pipeline_id=self.PILZ_PLANNING_PIPELINE_ID,
+            planner_label="Pilz",
+        ):
+            return True
+
+        if not self.OMPL_FALLBACK_ENABLED:
+            return False
+
+        self.get_logger().warn(
+            "Pilz single-goal planning failed; retrying with OMPL fallback"
+        )
+        return self._execute_single_joint_goal(
+            joint_angles,
+            planner_id=self.OMPL_PLANNER_ID,
+            planning_pipeline_id=self.OMPL_PLANNING_PIPELINE_ID,
+            planner_label="OMPL",
+        )
+
+    def _execute_single_joint_goal(
+        self,
+        joint_angles: tuple[float, float, float, float],
+        *,
+        planner_id: str,
+        planning_pipeline_id: str,
+        planner_label: str,
+    ) -> bool:
         self.scene_manager.allow_hanoi_contacts(log=False)
 
-        motion_plan_request = self._build_motion_plan_request(joint_angles)
-
         goal_msg = MoveGroup.Goal(
-            request=motion_plan_request,
+            request=self._build_motion_plan_request(
+                joint_angles,
+                planner_id=planner_id,
+                planning_pipeline_id=planning_pipeline_id,
+            ),
             planning_options=PlanningOptions(plan_only=False, replan=True),
         )
 
         future = self.action_client.send_goal_async(goal_msg)
         if not self.wait_for_future(future):
-            self.get_logger().error("Timed out while sending goal")
+            self.get_logger().error(f"Timed out while sending {planner_label} goal")
             return False
 
         goal_handle = future.result()
         if goal_handle is None or not goal_handle.accepted:
-            self.get_logger().error("Goal rejected")
+            self.get_logger().error(f"{planner_label} goal rejected")
             return False
 
         result_future = goal_handle.get_result_async()
         if not self.wait_for_future(result_future):
-            self.get_logger().error("Timed out while waiting for motion result")
+            self.get_logger().error(
+                f"Timed out while waiting for {planner_label} motion result"
+            )
             return False
 
         result = result_future.result().result
         if result.error_code.val == 1:
-            self.get_logger().info("Motion executed successfully")
+            self.get_logger().info(f"{planner_label} motion executed successfully")
             return True
 
-        self.get_logger().error(
-            f"Motion failed with error code: {result.error_code.val}"
+        self.get_logger().warn(
+            f"{planner_label} motion failed with error code: {result.error_code.val}"
         )
         return False
 
@@ -204,6 +285,9 @@ class MoveGroupPythonInterface(Node):
             if self._execute_joint_sequence(
                 joint_angle_sequence,
                 blend_radius=self.WAYPOINT_BLEND_RADIUS,
+                planner_id=self.PILZ_PLANNER_ID,
+                planning_pipeline_id=self.PILZ_PLANNING_PIPELINE_ID,
+                planner_label="Pilz",
             ):
                 return True
 
@@ -211,11 +295,39 @@ class MoveGroupPythonInterface(Node):
                 "Blended waypoint sequence failed; retrying without blend radius"
             )
 
-        if self._execute_joint_sequence(joint_angle_sequence, blend_radius=0.0):
+        if self._execute_joint_sequence(
+            joint_angle_sequence,
+            blend_radius=0.0,
+            planner_id=self.PILZ_PLANNER_ID,
+            planning_pipeline_id=self.PILZ_PLANNING_PIPELINE_ID,
+            planner_label="Pilz",
+        ):
             return True
 
+        if self.OMPL_FALLBACK_ENABLED:
+            self.get_logger().warn(
+                "Pilz waypoint sequence failed; retrying with OMPL fallback"
+            )
+            if self.WAYPOINT_BLEND_RADIUS > 0.0 and self._execute_joint_sequence(
+                joint_angle_sequence,
+                blend_radius=self.WAYPOINT_BLEND_RADIUS,
+                planner_id=self.OMPL_PLANNER_ID,
+                planning_pipeline_id=self.OMPL_PLANNING_PIPELINE_ID,
+                planner_label="OMPL",
+            ):
+                return True
+
+            if self._execute_joint_sequence(
+                joint_angle_sequence,
+                blend_radius=0.0,
+                planner_id=self.OMPL_PLANNER_ID,
+                planning_pipeline_id=self.OMPL_PLANNING_PIPELINE_ID,
+                planner_label="OMPL",
+            ):
+                return True
+
         self.get_logger().warn(
-            "Zero-blend waypoint sequence failed; falling back to single-point goals"
+            "Waypoint sequence failed; falling back to single-point goals"
         )
         return self._go_through_joint_states_with_stops(joint_angle_sequence)
 
@@ -224,6 +336,9 @@ class MoveGroupPythonInterface(Node):
         joint_angle_sequence: list[tuple[float, float, float, float]],
         *,
         blend_radius: float,
+        planner_id: str,
+        planning_pipeline_id: str,
+        planner_label: str,
     ) -> bool:
         self.scene_manager.allow_hanoi_contacts(log=False)
 
@@ -232,7 +347,11 @@ class MoveGroupPythonInterface(Node):
         for index, joint_angles in enumerate(joint_angle_sequence):
             sequence_items.append(
                 MotionSequenceItem(
-                    req=self._build_motion_plan_request(joint_angles),
+                    req=self._build_motion_plan_request(
+                        joint_angles,
+                        planner_id=planner_id,
+                        planning_pipeline_id=planning_pipeline_id,
+                    ),
                     blend_radius=(
                         0.0
                         if index == final_index
@@ -248,27 +367,33 @@ class MoveGroupPythonInterface(Node):
 
         future = self.sequence_action_client.send_goal_async(goal_msg)
         if not self.wait_for_future(future):
-            self.get_logger().error("Timed out while sending sequence goal")
+            self.get_logger().error(
+                f"Timed out while sending {planner_label} sequence goal"
+            )
             return False
 
         goal_handle = future.result()
         if goal_handle is None or not goal_handle.accepted:
-            self.get_logger().error("Sequence goal rejected")
+            self.get_logger().error(f"{planner_label} sequence goal rejected")
             return False
 
         result_future = goal_handle.get_result_async()
         if not self.wait_for_future(result_future):
-            self.get_logger().error("Timed out while waiting for sequence result")
+            self.get_logger().error(
+                f"Timed out while waiting for {planner_label} sequence result"
+            )
             return False
 
         result = result_future.result().result
         error_code = self._extract_moveit_error_code(result)
         if error_code == 1:
-            self.get_logger().info("Waypoint sequence executed successfully")
+            self.get_logger().info(
+                f"{planner_label} waypoint sequence executed successfully"
+            )
             return True
 
-        self.get_logger().error(
-            f"Waypoint sequence failed with error code: {error_code}"
+        self.get_logger().warn(
+            f"{planner_label} waypoint sequence failed with error code: {error_code}"
         )
         return False
 
@@ -297,27 +422,25 @@ class MoveGroupPythonInterface(Node):
         obstacles: tuple[bool, ...],
     ) -> None:
         self.get_logger().info(
-            "Spawning Hanoi towers and obstacles in planning scene"
+            "Refreshing Hanoi tower poses and obstacle state in planning scene"
         )
 
-        for tower_name in HANOI_TOWER_NAMES:
-            self.scene_manager.remove_attached_object(object_name=tower_name)
-        self.scene_manager.remove_world_objects((*HANOI_TOWER_NAMES, *BOX_NAMES))
+        self.scene_manager.remove_attached_objects(object_names=HANOI_TOWER_NAMES)
 
         stacks = self._build_stacks_from_tower_stations(tower_stations)
         tower_spacing = Tower_height - Tower_overlap
+        tower_positions = {}
         for station_index, stack in enumerate(stacks):
             station_x, station_y = STATION_POSITIONS[station_index]
             for stack_index, tower_name in enumerate(stack):
-                self.scene_manager.add_world_mesh(
-                    object_name=tower_name,
-                    position=Point(
-                        x=station_x,
-                        y=station_y,
-                        z=Tower_base + stack_index * tower_spacing,
-                    ),
+                tower_positions[tower_name] = Point(
+                    x=station_x,
+                    y=station_y,
+                    z=Tower_base + stack_index * tower_spacing,
                 )
+        self.scene_manager.move_world_meshes(tower_positions)
 
+        enabled_boxes = {}
         for index, enabled in enumerate(obstacles):
             if index >= len(BOX_POSITIONS):
                 break
@@ -325,14 +448,17 @@ class MoveGroupPythonInterface(Node):
                 continue
 
             x, y, z = BOX_POSITIONS[index]
-            self.scene_manager.add_world_box(
-                object_name=BOX_NAMES[index],
-                pose=Pose(
+            enabled_boxes[BOX_NAMES[index]] = (
+                Pose(
                     orientation=Quaternion(w=1.0),
                     position=Point(x=x, y=y, z=z),
                 ),
-                size=BOX_SIZE,
+                BOX_SIZE,
             )
+        self.scene_manager.refresh_world_boxes(
+            all_object_names=BOX_NAMES,
+            enabled_boxes=enabled_boxes,
+        )
 
         self.scene_manager.allow_hanoi_contacts(log=False)
         self.get_logger().info("Hanoi planning scene is ready")
@@ -349,8 +475,8 @@ class MoveGroupPythonInterface(Node):
     def _build_motion_plan_request(
         self,
         joint_angles: tuple[float, float, float, float],
-        planner_id: str = "PTP",
-        planning_pipeline_id: str = "pilz_industrial_motion_planner",
+        planner_id: str,
+        planning_pipeline_id: str,
     ) -> MotionPlanRequest:
         joint_constraints = [
             JointConstraint(
@@ -367,10 +493,10 @@ class MoveGroupPythonInterface(Node):
         request = MotionPlanRequest(
             group_name=self.GROUP_NAME,
             planner_id=planner_id,
-            num_planning_attempts=20,
-            allowed_planning_time=5.0,
-            max_velocity_scaling_factor=0.7,
-            max_acceleration_scaling_factor=0.7,
+            num_planning_attempts=self.PLANNING_ATTEMPTS,
+            allowed_planning_time=self.ALLOWED_PLANNING_TIME,
+            max_velocity_scaling_factor=1.0,
+            max_acceleration_scaling_factor=1.0,
             goal_constraints=[constraints],
         )
         if hasattr(request, "pipeline_id"):

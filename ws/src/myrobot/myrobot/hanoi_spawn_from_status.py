@@ -2,6 +2,10 @@ import rclpy
 from rclpy.node import Node
 
 from hanoi_interface.srv import GetHanoiStatus
+from myrobot.hanoi_model import (
+    status_obstacles_to_planner,
+    status_station_to_planner_station,
+)
 from myrobot_interfaces.srv import SetHanoiTowerStations
 
 
@@ -16,7 +20,9 @@ class HanoiStatusToSim(Node):
         )
         self.timer = self.create_timer(1.0, self.try_send)
         self.pending = False
-        self.last_sent: tuple[tuple[int, int, int], int] | None = None
+        self.last_sent: (
+            tuple[tuple[int, int, int], int, tuple[bool, bool]] | None
+        ) = None
         self.get_logger().info("HanoiStatusToSim started.")
 
     def try_send(self) -> None:
@@ -42,48 +48,47 @@ class HanoiStatusToSim(Node):
             self.get_logger().error(f"Status request failed: {exc}")
             return
 
-        tower_stations, target_station = self._convert_status(response)
+        tower_stations, target_station, obstacles = self._convert_status(response)
         if tower_stations is None or target_station is None:
             self.get_logger().info("Status incomplete; skip sending.")
             return
 
-        payload = (tower_stations, target_station)
+        payload = (tower_stations, target_station, obstacles)
         if self.last_sent == payload:
             return
 
         self.last_sent = payload
-        self.send_hanoi_request(tower_stations, target_station)
+        self.send_hanoi_request(tower_stations, target_station, obstacles)
 
-    @staticmethod
-    def _convert_station(value: int) -> int | None:
-        if value == 1:
-            return 0
-        if value == 2:
-            return 1
-        if value == 3:
-            return 2
-        return None
-
-    def _convert_status(self, response) -> tuple[tuple[int, int, int] | None, int | None]:
+    def _convert_status(
+        self,
+        response,
+    ) -> tuple[tuple[int, int, int] | None, int | None, tuple[bool, bool]]:
         # Assume tower1=large, tower2=medium, tower3=small
-        large = self._convert_station(response.large_pos)
-        medium = self._convert_station(response.medium_pos)
-        small = self._convert_station(response.small_pos)
-        target = self._convert_station(response.target_pos)
+        large = status_station_to_planner_station(response.large_pos)
+        medium = status_station_to_planner_station(response.medium_pos)
+        small = status_station_to_planner_station(response.small_pos)
+        target = status_station_to_planner_station(response.target_pos)
+        obstacles = status_obstacles_to_planner(
+            getattr(response, "left_obstacle", 1),
+            getattr(response, "right_obstacle", 1),
+        )
 
         if large is None or medium is None or small is None or target is None:
-            return None, None
+            return None, None, obstacles
 
-        return (large, medium, small), target
+        return (large, medium, small), target, obstacles
 
     def send_hanoi_request(
         self,
         tower_stations: tuple[int, int, int],
         target_station: int,
+        obstacles: tuple[bool, bool],
     ) -> None:
         request = SetHanoiTowerStations.Request()
         request.tower_stations = list(tower_stations)
         request.target_station = target_station
+        request.obstacle = list(obstacles)
 
         future = self.sim_client.call_async(request)
         future.add_done_callback(self.on_sim_response)

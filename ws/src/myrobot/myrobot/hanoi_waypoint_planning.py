@@ -1,45 +1,32 @@
 from dataclasses import dataclass
-from math import acos, atan2, cos, hypot, pi, sin
+from math import pi
 from typing import Literal
 
-JOINT_NAMES = ("joint1", "joint2", "joint3", "joint4")
-Joint_NAMES = JOINT_NAMES
-LINK_LENGTH = (0.0600, 0.0820, 0.1320, 0.1664, 0.0480, 0.0040)
-JOINT_LIMITS = (
-    (-1.2, 1.2),
-    (-2.0, 2.0),
-    (-1.67, 1.67),
-    (-pi / 2, pi / 2),
-)
-HOME_POSITION = (0.0, -pi / 2, pi / 2, 0.0)
-
-# You can measure these in Lab402.
-Tower_base = 0.0014
-Tower_height = 0.03
-Tower_overlap = 0.010
-Tower_mesh_height = 0.02
-End_effector_contact_offset = 0.0
-
-# You may want to slightly change this.
-STATION_POSITIONS = (
-    (0.25, 0.15),
-    (0.25, 0.0),
-    (0.25, -0.165),
-)
-NUM_DISKS = 3
-SOURCE_STATION = 1
-TARGET_STATION = 0
-APPROACH_HEIGHT = 0.15
-DIRECT_TRANSFER_CLEARANCE = 0.035
-OBSTACLE_TRANSFER_CLEARANCE = 0.035
-MOTION_DELAY = 0.03
-START_WAYPOINT_POSITION = (0.25, 0.0, 0.20)
-END_WAYPOINT_POSITION = (0.25, 0.1, 0.25)
-HANOI_TOWER_NAMES = tuple(f"tower{index}" for index in range(1, NUM_DISKS + 1))
-OBSTACLE_SIZE = (0.12, 0.001, 0.15)
-OBSTACLE_POSITIONS = (
-    (0.25, -0.075, 0.05),
-    (0.25, 0.075, 0.05),
+from myrobot.hanoi_kinematics import ArmKinematics
+from myrobot.hanoi_model import (
+    APPROACH_HEIGHT,
+    DIRECT_TRANSFER_CLEARANCE,
+    END_WAYPOINT_POSITION,
+    End_effector_contact_offset,
+    HANOI_TOWER_NAMES,
+    HOME_POSITION,
+    JOINT_LIMITS,
+    JOINT_NAMES,
+    LINK_LENGTH,
+    MOTION_DELAY,
+    NUM_DISKS,
+    OBSTACLE_POSITIONS,
+    OBSTACLE_SIZE,
+    OBSTACLE_TRANSFER_CLEARANCE,
+    SOURCE_STATION,
+    START_WAYPOINT_POSITION,
+    STATION_POSITIONS,
+    TARGET_STATION,
+    Tower_base,
+    Tower_height,
+    Tower_mesh_height,
+    Tower_overlap,
+    Joint_NAMES,
 )
 
 SceneAction = Literal["attach", "detach"]
@@ -68,102 +55,6 @@ class HanoiTaskPlan:
     largest_station: int
 
 
-class ArmKinematics:
-    def __init__(
-        self,
-        *,
-        link_lengths: tuple[float, float, float, float, float, float] = LINK_LENGTH,
-        joint_limits: tuple[tuple[float, float], ...] = JOINT_LIMITS,
-        home_position: tuple[float, float, float, float] = HOME_POSITION,
-    ) -> None:
-        self.link_lengths = link_lengths
-        self.joint_limits = joint_limits
-        self.home_position = home_position
-
-    def solve(
-        self,
-        x: float,
-        y: float,
-        z: float,
-        pitch: float = pi / 2,
-    ) -> tuple[float, float, float, float]:
-        """Analytic IK for the 4-DOF arm described by myrobot.urdf."""
-        base_height = self.link_lengths[0] + self.link_lengths[1]
-        upper_arm = self.link_lengths[2]
-        forearm = self.link_lengths[3]
-        tool_z = self.link_lengths[4]
-        tool_x = self.link_lengths[5]
-
-        joint1 = atan2(y, x) if hypot(x, y) > 1e-12 else 0.0
-        if not self._inside_limit(joint1, 0):
-            raise ValueError(f"joint1 angle {joint1:.3f} rad exceeds the URDF limit")
-
-        radius = hypot(x, y)
-        tool_radius = tool_x * cos(pitch) + tool_z * sin(pitch)
-        tool_height = -tool_x * sin(pitch) + tool_z * cos(pitch)
-        wrist_radius = radius - tool_radius
-        wrist_height = z - base_height - tool_height
-
-        wrist_distance = hypot(wrist_radius, wrist_height)
-        min_reach = abs(upper_arm - forearm)
-        max_reach = upper_arm + forearm
-        if wrist_distance < min_reach - 1e-9 or wrist_distance > max_reach + 1e-9:
-            raise ValueError(
-                "target is outside the reachable workspace "
-                f"(wrist distance {wrist_distance:.3f} m, reachable "
-                f"{min_reach:.3f} m to {max_reach:.3f} m)"
-            )
-
-        cos_joint3 = (
-            wrist_radius**2
-            + wrist_height**2
-            - upper_arm**2
-            - forearm**2
-        ) / (2.0 * upper_arm * forearm)
-        cos_joint3 = max(-1.0, min(1.0, cos_joint3))
-
-        candidates = []
-        for joint3 in (acos(cos_joint3), -acos(cos_joint3)):
-            joint2 = atan2(wrist_radius, wrist_height) - atan2(
-                forearm * sin(joint3),
-                upper_arm + forearm * cos(joint3),
-            )
-            joint4 = pitch - joint2 - joint3
-            joint_angles = (joint1, joint2, joint3, joint4)
-
-            if all(
-                self._inside_limit(angle, index)
-                for index, angle in enumerate(joint_angles)
-            ):
-                score = sum(
-                    abs(angle - home)
-                    for angle, home in zip(joint_angles, self.home_position)
-                )
-                candidates.append((score, joint_angles))
-
-        if not candidates:
-            raise ValueError("target is reachable geometrically, but violates joint limits")
-
-        _, solution = min(candidates, key=lambda item: item[0])
-        return tuple(
-            self._clamp_to_limit(angle, index)
-            for index, angle in enumerate(solution)
-        )
-
-    def _inside_limit(
-        self,
-        angle: float,
-        joint_index: int,
-        tolerance: float = 1e-9,
-    ) -> bool:
-        lower, upper = self.joint_limits[joint_index]
-        return lower - tolerance <= angle <= upper + tolerance
-
-    def _clamp_to_limit(self, angle: float, joint_index: int) -> float:
-        lower, upper = self.joint_limits[joint_index]
-        return max(lower, min(upper, angle))
-
-
 class HanoiTowerWaypointPlanner:
     def __init__(
         self,
@@ -178,6 +69,8 @@ class HanoiTowerWaypointPlanner:
         end_waypoint_position: tuple[float, float, float] | None = (
             END_WAYPOINT_POSITION
         ),
+        stop_at_transfer_waypoints: bool = False,
+        stop_at_boundary_waypoints: bool = False,
     ) -> None:
         self.num_disks = num_disks
         self.station_positions = station_positions
@@ -187,6 +80,8 @@ class HanoiTowerWaypointPlanner:
         )
         self.start_waypoint_position = start_waypoint_position
         self.end_waypoint_position = end_waypoint_position
+        self.stop_at_transfer_waypoints = stop_at_transfer_waypoints
+        self.stop_at_boundary_waypoints = stop_at_boundary_waypoints
 
     def build_default_waypoints(
         self,
@@ -271,7 +166,7 @@ class HanoiTowerWaypointPlanner:
                     y=y,
                     z=z,
                     magnet_on=False,
-                    stop_at_waypoint=True,
+                    stop_at_waypoint=self.stop_at_boundary_waypoints,
                 ),
             )
 
@@ -283,7 +178,7 @@ class HanoiTowerWaypointPlanner:
                     y=y,
                     z=z,
                     magnet_on=False,
-                    stop_at_waypoint=True,
+                    stop_at_waypoint=self.stop_at_boundary_waypoints,
                 )
             )
 
@@ -425,7 +320,7 @@ class HanoiTowerWaypointPlanner:
                 obstacle_y,
                 transit_z,
                 True,
-                stop_at_waypoint=True,
+                stop_at_waypoint=self.stop_at_transfer_waypoints,
             )
             for obstacle_x, obstacle_y, _ in self.crossed_obstacles(
                 source_y,
@@ -493,7 +388,7 @@ class HanoiTowerWaypointPlanner:
                     source_y,
                     transit_z,
                     False,
-                    stop_at_waypoint=True,
+                    stop_at_waypoint=self.stop_at_transfer_waypoints,
                 )
             )
 
@@ -503,7 +398,7 @@ class HanoiTowerWaypointPlanner:
                 obstacle_y,
                 transit_z,
                 False,
-                stop_at_waypoint=True,
+                stop_at_waypoint=self.stop_at_transfer_waypoints,
             )
             for obstacle_x, obstacle_y, _ in self.crossed_obstacles(
                 source_y,
@@ -517,7 +412,7 @@ class HanoiTowerWaypointPlanner:
                 target_y,
                 transit_z,
                 False,
-                stop_at_waypoint=True,
+                stop_at_waypoint=self.stop_at_transfer_waypoints,
             )
         )
         return waypoints
@@ -532,12 +427,6 @@ class HanoiTowerWaypointPlanner:
         station_clearance_z: float,
         active_obstacles: tuple[tuple[float, float, float], ...],
     ) -> float:
-        if len(active_obstacles) >= 2:
-            return (
-                max(pick_z, place_z, station_clearance_z)
-                + self.approach_height
-            )
-
         transit_z = (
             max(pick_z, place_z, station_clearance_z)
             + DIRECT_TRANSFER_CLEARANCE
@@ -551,7 +440,7 @@ class HanoiTowerWaypointPlanner:
             return transit_z
 
         obstacle_top_z = max(
-            obstacle_z + OBSTACLE_SIZE[2] / 2.0
+            self.obstacle_top_z(obstacle_z)
             for _, _, obstacle_z in crossed_obstacles
         )
         return max(transit_z, obstacle_top_z + OBSTACLE_TRANSFER_CLEARANCE)
@@ -575,7 +464,7 @@ class HanoiTowerWaypointPlanner:
             return transit_z
 
         obstacle_top_z = max(
-            obstacle_z + OBSTACLE_SIZE[2] / 2.0
+            self.obstacle_top_z(obstacle_z)
             for _, _, obstacle_z in crossed_obstacles
         )
         return max(transit_z, obstacle_top_z + OBSTACLE_TRANSFER_CLEARANCE)
@@ -612,7 +501,7 @@ class HanoiTowerWaypointPlanner:
         crossed = [
             obstacle
             for obstacle in active_obstacles
-            if lower_y < obstacle[1] < upper_y
+            if self.obstacle_crosses_y_segment(obstacle[1], lower_y, upper_y)
         ]
 
         if source_y <= target_y:
@@ -620,6 +509,22 @@ class HanoiTowerWaypointPlanner:
         else:
             crossed.sort(key=lambda obstacle: obstacle[1], reverse=True)
         return tuple(crossed)
+
+    @staticmethod
+    def obstacle_top_z(obstacle_z: float) -> float:
+        return obstacle_z + OBSTACLE_SIZE[2] / 2.0
+
+    @staticmethod
+    def obstacle_crosses_y_segment(
+        obstacle_y: float,
+        lower_y: float,
+        upper_y: float,
+    ) -> bool:
+        half_depth = OBSTACLE_SIZE[1] / 2.0
+        return (
+            lower_y < obstacle_y + half_depth
+            and obstacle_y - half_depth < upper_y
+        )
 
     @staticmethod
     def active_obstacle_positions(

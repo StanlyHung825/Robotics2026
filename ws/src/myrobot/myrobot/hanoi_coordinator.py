@@ -1,83 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
 import sys
 import time
-import json
 import threading
-from pathlib import Path
-from ament_index_python.packages import get_package_share_directory
 
 import rclpy
 from rclpy.node import Node
-import trimesh
-
-from geometry_msgs.msg import Point, Pose, Quaternion
-from moveit_msgs.msg import CollisionObject
-from shape_msgs.msg import Mesh, MeshTriangle, SolidPrimitive
-from std_msgs.msg import Header
 
 from hanoi_interface.srv import GetHanoiStatus
+from myrobot.hanoi_model import status_station_to_planner_station
 from myrobot_interfaces.srv import SetHanoiTowerStations
-
-# Positions for stations
-STATION_POSITIONS = (
-    (0.25, 0.15),   # Station 0 (Left / A)
-    (0.25, 0.0),    # Station 1 (Middle / B)
-    (0.25, -0.15),  # Station 2 (Right / C)
-)
-
-BOX_SIZE = (0.1, 0.001, 0.1)
-BOX_POSITIONS = (
-    (0.25, -0.075, 0.05),
-    (0.25, 0.075, 0.05),
-)
-
-NUM_DISKS = 3
-HANOI_TOWER_NAMES = ("tower1", "tower2", "tower3") # tower1=Large, tower2=Medium, tower3=Small
-
-# Tower geometry constants
-Tower_base = 0.0014
-Tower_height = 0.025
-Tower_overlap = 0.015
-
-# Mesh files configuration
-MESH_DIR = Path(get_package_share_directory("myplan")) / "mesh"
-MESH_FILE_PATH = {
-    tower_name: str(MESH_DIR / f"{tower_name}.stl")
-    for tower_name in HANOI_TOWER_NAMES
-}
-MESH_SCALE = (0.00095, 0.00095, 0.00095)
-
-
-def load_mesh_from_file(file_path: str, scale: tuple[float, float, float]) -> Mesh:
-    mesh_data = trimesh.load(file_path, force="mesh")
-    assert isinstance(mesh_data, trimesh.base.Trimesh)
-
-    vertices = [
-        Point(x=float(v[0]) * scale[0], y=float(v[1]) * scale[1], z=float(v[2]) * scale[2])
-        for v in mesh_data.vertices
-    ]
-    triangles = [
-        MeshTriangle(vertex_indices=[int(f[0]), int(f[1]), int(f[2])])
-        for f in mesh_data.faces if len(f) == 3
-    ]
-    return Mesh(triangles=triangles, vertices=vertices)
 
 
 class HanoiCoordinator(Node):
     def __init__(self):
         super().__init__('hanoi_coordinator')
-        self.PLANNING_FRAME = "world"
-
-        # Clients
         self.status_client = self.create_client(GetHanoiStatus, 'get_hanoi_positions')
         self.planner_client = self.create_client(SetHanoiTowerStations, '/set_hanoi_tower_stations')
-
-        # Publisher for planning scene collision objects
-        self.collision_object_publisher = self.create_publisher(CollisionObject, '/collision_object', 10)
-
         self.get_logger().info("Hanoi Coordinator Node initialized.")
 
     def query_status(self) -> tuple[tuple[int, int, int] | None, int | None, int, int]:
@@ -102,10 +42,10 @@ class HanoiCoordinator(Node):
                 return None, None, 1, 1
             
             # Map response 1-based index (1=A, 2=B, 3=C) to 0-based (0=A, 1=B, 2=C)
-            large = self._map_station(response.large_pos)
-            medium = self._map_station(response.medium_pos)
-            small = self._map_station(response.small_pos)
-            target = self._map_station(response.target_pos)
+            large = status_station_to_planner_station(response.large_pos)
+            medium = status_station_to_planner_station(response.medium_pos)
+            small = status_station_to_planner_station(response.small_pos)
+            target = status_station_to_planner_station(response.target_pos)
 
             left_obstacle = getattr(response, 'left_obstacle', 1)
             right_obstacle = getattr(response, 'right_obstacle', 1)
@@ -119,96 +59,13 @@ class HanoiCoordinator(Node):
             self.get_logger().error(f"Error querying status: {e}")
             return None, None, 1, 1
 
-    def _map_station(self, pos: int) -> int | None:
-        if pos == 1: return 0
-        if pos == 2: return 1
-        if pos == 3: return 2
-        return None
-
-    def remove_object(self, object_name: str):
-        collision_object = CollisionObject(
-            header=Header(frame_id=self.PLANNING_FRAME, stamp=self.get_clock().now().to_msg()),
-            id=object_name,
-            operation=CollisionObject.REMOVE
-        )
-        self.collision_object_publisher.publish(collision_object)
-        time.sleep(0.1)
-
-    def add_mesh(self, mesh_name: str, mesh_position: Point):
-        pose = Pose(
-            position=mesh_position,
-            orientation=Quaternion(x=0.7071081, y=0.0, z=0.0, w=0.7071081)
-        )
-        collision_object = CollisionObject(
-            header=Header(frame_id=self.PLANNING_FRAME, stamp=self.get_clock().now().to_msg()),
-            id=mesh_name,
-            meshes=[load_mesh_from_file(MESH_FILE_PATH[mesh_name], MESH_SCALE)],
-            mesh_poses=[pose],
-            operation=CollisionObject.ADD
-        )
-        self.collision_object_publisher.publish(collision_object)
-        time.sleep(0.2)
-
-    def add_box(self, box_name: str, box_pose: Pose, size: tuple[float, float, float]):
-        box = SolidPrimitive(type=SolidPrimitive.BOX, dimensions=size)
-        collision_object = CollisionObject(
-            header=Header(frame_id=self.PLANNING_FRAME, stamp=self.get_clock().now().to_msg()),
-            id=box_name,
-            primitives=[box],
-            primitive_poses=[box_pose],
-            operation=CollisionObject.ADD
-        )
-        self.collision_object_publisher.publish(collision_object)
-        time.sleep(0.1)
-
-    def spawn_scene_objects(self, tower_stations: tuple[int, int, int], left_obstacle: int, right_obstacle: int):
-        """Clear and spawn Hanoi meshes and boxes in MoveIt environment"""
-        self.get_logger().info("Spawning collision objects in MoveIt planning scene...")
-        
-        # 1. Clear old objects
-        for name in HANOI_TOWER_NAMES:
-            self.remove_object(name)
-        for i in range(len(BOX_POSITIONS)):
-            self.remove_object(f"box_{i+1}")
-
-        # 2. Build stacks
-        stacks = [[] for _ in range(3)]
-        # Append largest first, then medium, then small
-        stacks[tower_stations[0]].append("tower1")
-        stacks[tower_stations[1]].append("tower2")
-        stacks[tower_stations[2]].append("tower3")
-
-        # 3. Spawn meshes
-        tower_spacing = Tower_height - Tower_overlap
-        for station_idx, stack in enumerate(stacks):
-            station_x, station_y = STATION_POSITIONS[station_idx]
-            for stack_idx, name in enumerate(stack):
-                pos = Point(
-                    x=station_x,
-                    y=station_y,
-                    z=Tower_base + stack_idx * tower_spacing
-                )
-                self.add_mesh(name, pos)
-
-        # 4. Spawn boxes (barriers) conditionally
-        # BOX_POSITIONS[0] corresponds to human Left barrier (between B and C) -> box_1
-        # BOX_POSITIONS[1] corresponds to human Right barrier (between A and B) -> box_2
-        if left_obstacle == 1:
-            pose = Pose(
-                position=Point(x=BOX_POSITIONS[0][0], y=BOX_POSITIONS[0][1], z=BOX_POSITIONS[0][2]),
-                orientation=Quaternion(w=1.0)
-            )
-            self.add_box("box_1", pose, BOX_SIZE)
-        if right_obstacle == 1:
-            pose = Pose(
-                position=Point(x=BOX_POSITIONS[1][0], y=BOX_POSITIONS[1][1], z=BOX_POSITIONS[1][2]),
-                orientation=Quaternion(w=1.0)
-            )
-            self.add_box("box_2", pose, BOX_SIZE)
-
-        self.get_logger().info("Planning scene objects spawned successfully.")
-
-    def trigger_hanoi_planner(self, tower_stations: tuple[int, int, int], target_station: int, left_obstacle: int, right_obstacle: int) -> bool:
+    def trigger_hanoi_planner(
+        self,
+        tower_stations: tuple[int, int, int],
+        target_station: int,
+        left_obstacle: int,
+        right_obstacle: int,
+    ) -> bool:
         """Call set_hanoi_tower_stations service to start path execution"""
         if not self.planner_client.wait_for_service(timeout_sec=5.0):
             self.get_logger().error("/set_hanoi_tower_stations planner service not available!")
@@ -219,7 +76,12 @@ class HanoiCoordinator(Node):
         request.obstacle = [bool(left_obstacle), bool(right_obstacle)]
         request.target_station = target_station
 
-        self.get_logger().info(f"Sending planning request: tower_stations={tower_stations}, target_station={target_station}, obstacles={[bool(left_obstacle), bool(right_obstacle)]}")
+        self.get_logger().info(
+            "Sending planning request: "
+            f"tower_stations={tower_stations}, "
+            f"target_station={target_station}, "
+            f"obstacles={[bool(left_obstacle), bool(right_obstacle)]}"
+        )
         future = self.planner_client.call_async(request)
         
         # Wait for result

@@ -31,7 +31,6 @@ setup(
     entry_points={
         'console_scripts': [
             'hanoi_vision = myrobot.hanoi_vision_status_node:main',
-            'hanoi_status_listener = myrobot.hanoi_status_listener:main',
             'hanoi_status_to_sim = myrobot.hanoi_spawn_from_status:main',
             'hanoi_planner = myrobot.0_hanoi_planner:main',
             'hanoi_spawn_objects = myrobot.0_hanoi_spawn_objects:main',

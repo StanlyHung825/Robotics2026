@@ -39,6 +39,13 @@ def generate_launch_description():
         output='screen'
     )
 
+    hanoi_status_to_sim = Node(
+        package='myrobot',
+        executable='hanoi_status_to_sim',
+        name='hanoi_status_to_sim',
+        output='screen'
+    )
+
     # 5. Voice GPT parser node
     voicegpt = Node(
         package='voicegpt',
@@ -66,6 +73,7 @@ def generate_launch_description():
         hanoi_planner,
         usb_cam,
         hanoi_vision,
+        hanoi_status_to_sim,
         voicegpt,
         magnet_serial,
         magnet_moveit
